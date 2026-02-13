@@ -242,6 +242,24 @@ async function ensureCollectionsExist(db) {
   } else {
     console.log('✅ Join WhatsApp group collection already exists');
   }
+
+  // Check and create join_zoom_meeting collection if it doesn't exist
+  if (!collectionNames.includes('join_zoom_meeting')) {
+    console.log('🎦 Creating join_zoom_meeting collection...');
+    await db.createCollection('join_zoom_meeting');
+    console.log('✅ Join Zoom Meeting collection created');
+  } else {
+    console.log('✅ Join Zoom Meeting collection already exists');
+  }
+
+  // Check and create mock_exams collection if it doesn't exist
+  if (!collectionNames.includes('mock_exams')) {
+    console.log('📝 Creating mock_exams collection...');
+    await db.createCollection('mock_exams');
+    console.log('✅ Mock exams collection created');
+  } else {
+    console.log('✅ Mock exams collection already exists');
+  }
 }
 
 async function seedDatabase() {
@@ -270,6 +288,8 @@ async function seedDatabase() {
     await db.collection('scoring_system_history').deleteMany({});
     await db.collection('homeworks_videos').deleteMany({});
     await db.collection('join_whatsapp_group').deleteMany({});
+    await db.collection('join_zoom_meeting').deleteMany({});
+    await db.collection('mock_exams').deleteMany({});
     
     console.log('✅ Database cleared');
     
@@ -439,50 +459,57 @@ async function seedDatabase() {
     }
     
     const students = [];
-    const centers = [
-      'Egypt Center',
-      'Kayan Center', 
-      'Hany Pierre Center',
-      'Tabark Center',
-      'EAY Center',
-      'St. Mark Church'
-    ];
-    const grades = ['Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
-    const genders = ['Male', 'Female'];
-    const courses = ['SAT', 'ACT', 'EST'];
-    const courseTypes = ['basics', 'advanced'];
+    // const centers = [
+    //   'Egypt Center',
+    //   'Kayan Center', 
+    //   'Hany Pierre Center',
+    //   'Tabark Center',
+    //   'EAY Center',
+    //   'St. Mark Church'
+    // ];
+    // const grades = ['Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
+    // const genders = ['Male', 'Female'];
+    // const courses = ['SAT', 'ACT', 'EST'];
+    // const courseTypes = ['basics', 'advanced'];
     
-    for (let i = 1; i <= 500; i++) {
-      const center = centers[Math.floor(Math.random() * centers.length)];
-      const lessonsObj = createLessonsObject();
+    // for (let i = 1; i <= 500; i++) {
+    //   const center = centers[Math.floor(Math.random() * centers.length)];
+    //   const lessonsObj = createLessonsObject();
       
-      students.push({
-        id: i,
-        name: faker.person.fullName(),
-        age: Math.floor(Math.random() * 6) + 10,
-        gender: genders[Math.floor(Math.random() * genders.length)],
-        grade: grades[Math.floor(Math.random() * grades.length)],
-        course: courses[Math.floor(Math.random() * courses.length)], // or get from grade
-        courseType: courseTypes[Math.floor(Math.random() * courseTypes.length)],
-        school: faker.company.name() + ' School',
-        phone: generatePhoneNumber(),
-        parentsPhone: generatePhoneNumber(),
-        main_center: center,
-        main_comment: null,
-        account_state: 'Activated',
-        score: 0,
-        lessons: lessonsObj, // Empty object, lessons will be added as students attend
-        payment: {
-          numberOfSessions: 0,
-          cost: 0,
-          paymentComment: null,
-          date: null
-        },
-        online_sessions: [],
-        online_homeworks: [],
-        online_quizzes: [],
-      });
-    }
+    //   students.push({
+    //     id: i,
+    //     name: faker.person.fullName(),
+    //     age: Math.floor(Math.random() * 6) + 10,
+    //     gender: genders[Math.floor(Math.random() * genders.length)],
+    //     grade: grades[Math.floor(Math.random() * grades.length)],
+    //     course: courses[Math.floor(Math.random() * courses.length)], // or get from grade
+    //     courseType: courseTypes[Math.floor(Math.random() * courseTypes.length)],
+    //     school: faker.company.name() + ' School',
+    //     phone: generatePhoneNumber(),
+    //     parentsPhone: generatePhoneNumber(),
+    //     main_center: center,
+    //     main_comment: null,
+    //     account_state: 'Activated',
+    //     score: 0,
+    //     lessons: lessonsObj, // Empty object, lessons will be added as students attend
+    //     payment: {
+    //       numberOfSessions: 0,
+    //       cost: 0,
+    //       paymentComment: null,
+    //       date: null
+    //     },
+    //     online_sessions: [],
+    //     online_homeworks: [],
+    //     online_quizzes: [],
+    //     online_mock_exams: [],
+    //     mockExams: Array(50).fill(null).map(() => ({
+    //       examDegree: null,
+    //       outOf: null,
+    //       percentage: null,
+    //       date: null
+    //     })),
+    //   });
+    // }
     
     console.log('👨‍🎓 Creating students...');
     if (students.length > 0) {
@@ -566,6 +593,28 @@ async function seedDatabase() {
             points: 30
           }
         ]
+      },
+      {
+        _id: "mock-exam",
+        type: "mock-exam",
+        rules: [
+          { min: 100, max: 100, points: 35 },
+          { min: 75, max: 99, points: 25 },
+          { min: 50, max: 74, points: 20 },
+          { min: 20, max: 49, points: 15 },
+          { min: 1, max: 19, points: 10 },
+          { min: 0, max: 0, points: -25 }
+        ],
+        bonusRules: [
+          {
+            key: "four_100_streak",
+            condition: {
+              lastN: 4,
+              percentage: 100
+            },
+            points: 50
+          }
+        ]
       }
     ];
     await db.collection('scoring_system_conditions').insertMany(scoringConditions);
@@ -582,6 +631,14 @@ async function seedDatabase() {
     // Initialize join_whatsapp_group collection (empty, will be populated by admin)
     console.log('💬 Initializing join_whatsapp_group collection...');
     console.log('✅ Join WhatsApp group collection initialized (empty)');
+    
+    // Initialize join_zoom_meeting collection (empty, will be populated by admin)
+    console.log('🎦 Initializing join_zoom_meeting collection...');
+    console.log('✅ Join Zoom Meeting collection initialized (empty)');
+    
+    // Initialize mock_exams collection (empty, will be populated by admin)
+    console.log('📝 Initializing mock_exams collection...');
+    console.log('✅ Mock exams collection initialized (empty)');
 
     // Create verification accounts codes collection
     console.log('🔐 Creating verification accounts codes...');
@@ -674,6 +731,8 @@ async function seedDatabase() {
     console.log('- Scoring system history collection initialized (empty)');
     console.log('- Homeworks videos collection initialized (empty)');
     console.log('- Join WhatsApp group collection initialized (empty)');
+    console.log('- Mock exams collection initialized (empty)');
+    console.log('- Join Zoom Meeting collection initialized (empty)');
     console.log('\n🔑 Demo Login Credentials:');
     console.log('Admin ID: admin, Password: admin');
     console.log('Tony ID: tony, Password: tony');

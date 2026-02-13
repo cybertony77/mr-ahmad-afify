@@ -79,7 +79,9 @@ export default function CourseTypeSelect({ selectedCourseType, onCourseTypeChang
                 cursor: 'pointer',
                 borderBottom: '1px solid #f8f9fa',
                 transition: 'background-color 0.2s ease',
-                color: '#000000'
+                color: selectedCourseType === courseType ? '#1FA8DC' : '#000000',
+                backgroundColor: selectedCourseType === courseType ? '#f0f8ff' : '#ffffff',
+                fontWeight: selectedCourseType === courseType ? '600' : '400'
               }}
               onClick={() => handleCourseTypeSelect(courseType)}
               onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}

@@ -69,7 +69,8 @@ export default function EditStudent() {
         name: student.name || "",
         age: student.age || "",
         gender: student.gender || "",
-        grade: student.course || student.grade || "", // Use course if available, fallback to grade
+        grade: student.grade || "", // Actual grade (e.g. "1st Secondary")
+        course: student.course || "", // Course (EST/SAT/ACT)
         courseType: student.courseType || "basics",
         phone: student.phone || "",
         parents_phone: (student.parentsPhone || student.parentsPhone1 || student.parents_phone || ''), // Support both old and new
@@ -278,11 +279,7 @@ export default function EditStudent() {
     const updatedStudent = { ...changedFields };
     
     // Handle special field transformations
-    if (changedFields.grade) {
-      // For course field, send as 'course' not 'grade'
-      updatedStudent.course = changedFields.grade;
-      delete updatedStudent.grade;
-    }
+    // grade and course are now separate fields - send them as-is
     // Normalize comment: empty string -> null, trim non-empty
     if (Object.prototype.hasOwnProperty.call(changedFields, 'comment')) {
       const c = changedFields.comment;
@@ -705,11 +702,22 @@ export default function EditStudent() {
                 onClose={() => setGenderDropdownOpen(false)}
               />
             </div>
+            <div className="form-group">
+              <label>Grade</label>
+              <input
+                className="form-input"
+                name="grade"
+                placeholder="Enter student's grade (e.g. 1st Secondary)"
+                value={formData.grade || ''}
+                onChange={handleChange}
+                autocomplete="off"
+              />
+            </div>
               <div className="form-group">
               <label>Course <span style={{color: 'red'}}>*</span></label>
               <CourseSelect 
-                  selectedGrade={formData.grade || ''} 
-                onGradeChange={(course) => handleChange({ target: { name: 'grade', value: course } })} 
+                  selectedGrade={formData.course || ''} 
+                onGradeChange={(course) => handleChange({ target: { name: 'course', value: course } })} 
                 required 
                 isOpen={openDropdown === 'course'}
                 onToggle={() => setOpenDropdown(openDropdown === 'course' ? null : 'course')}

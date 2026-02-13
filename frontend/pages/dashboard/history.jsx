@@ -7,7 +7,7 @@ import Title from "../../components/Title";
 import CourseSelect from "../../components/CourseSelect";
 import CourseTypeSelect from "../../components/CourseTypeSelect";
 import CenterSelect from "../../components/CenterSelect";
-import AttendanceLessonSelect from "../../components/AttendanceLessonSelect";
+import AttendanceLessonSelect from "../../components/AttendancelessonSelect";
 import { Table, ScrollArea } from '@mantine/core';
 import styles from '../../styles/TableScrollArea.module.css';
 import { IconArrowRight, IconSearch, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';

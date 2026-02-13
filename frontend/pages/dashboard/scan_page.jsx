@@ -30,6 +30,7 @@ function extractStudentId(qrText) {
 export default function QR() {
   const { data: systemConfig } = useSystemConfig();
   const isScoringEnabled = systemConfig?.scoring_system === true || systemConfig?.scoring_system === 'true';
+  const isPaymentSystemEnabled = systemConfig?.payment_system === true || systemConfig?.payment_system === 'true';
   
   const containerRef = useRef(null);
   const [studentId, setStudentId] = useState("");
@@ -459,21 +460,23 @@ export default function QR() {
       return;
     }
 
-    // Check for session availability
-    const availableSessions = rawStudent.payment?.numberOfSessions || 0;
-    
-    // Check if student has any paid lessons for the selected lesson
-    const hasPaidLesson = selectedLesson && rawStudent.lessons && rawStudent.lessons[selectedLesson] && rawStudent.lessons[selectedLesson].paid === true;
-    
-    if (availableSessions <= 0 && !hasPaidLesson) {
-      console.log('❌ No sessions available and no paid lesson - showing error message');
-      setError("Sorry, this account has used all his available sessions. Please pay again to continue.");
-      console.log('🔧 Error state set to:', "Sorry, this account has used all his available sessions. Please pay again to continue.");
-      return;
+    // Check for session availability (only if payment system is enabled)
+    if (isPaymentSystemEnabled) {
+      const availableSessions = rawStudent.payment?.numberOfSessions || 0;
+      
+      // Check if student has any paid lessons for the selected lesson
+      const hasPaidLesson = selectedLesson && rawStudent.lessons && rawStudent.lessons[selectedLesson] && rawStudent.lessons[selectedLesson].paid === true;
+      
+      if (availableSessions <= 0 && !hasPaidLesson) {
+        console.log('❌ No sessions available and no paid lesson - showing error message');
+        setError("Sorry, this account has used all his available sessions. Please pay again to continue.");
+        console.log('🔧 Error state set to:', "Sorry, this account has used all his available sessions. Please pay again to continue.");
+        return;
+      }
     }
 
     // For activated students with available sessions, clear any errors
-    console.log('✅ Activated student with available sessions - clearing errors');
+    console.log('✅ Activated student - clearing errors');
     setError("");
   }, [rawStudent, selectedLesson, attendanceCenter]);
 
@@ -658,13 +661,15 @@ export default function QR() {
     if (!student || !selectedLesson || !attendanceCenter) return;
     if (student.account_deactivated) return; // Don't allow attendance for deactivated accounts
     
-    // Check if student has available sessions or paid lesson
-    const availableSessions = student.payment?.numberOfSessions || 0;
-    const hasPaidLesson = student.lessons && student.lessons[selectedLesson] && student.lessons[selectedLesson].paid === true;
-    
-    if (availableSessions <= 0 && !hasPaidLesson) {
-      setError("Sorry, this account has used all his available sessions. Please pay again to continue.");
-      return;
+    // Check if student has available sessions or paid lesson (only if payment system is enabled)
+    if (isPaymentSystemEnabled) {
+      const availableSessions = student.payment?.numberOfSessions || 0;
+      const hasPaidLesson = student.lessons && student.lessons[selectedLesson] && student.lessons[selectedLesson].paid === true;
+      
+      if (availableSessions <= 0 && !hasPaidLesson) {
+        setError("Sorry, this account has used all his available sessions. Please pay again to continue.");
+        return;
+      }
     }
     
     // Use current displayed state (optimistic if available, otherwise DB state)
@@ -1886,7 +1891,7 @@ export default function QR() {
 
 
       {student && selectedLesson && attendanceCenter && rawStudent?.account_state !== 'Deactivated' && 
-       ((rawStudent?.payment?.numberOfSessions || 0) > 0 || 
+       (!isPaymentSystemEnabled || (rawStudent?.payment?.numberOfSessions || 0) > 0 || 
         (rawStudent?.lessons && rawStudent?.lessons[selectedLesson] && rawStudent?.lessons[selectedLesson].paid === true)) && (
         <div className="student-card">
           {console.log('📋 Student card rendering:', {
@@ -1924,6 +1929,7 @@ export default function QR() {
               <span className="info-value">{student.school}</span>
             </div>
             )}
+            {isPaymentSystemEnabled && (
             <div className="info-item">
               <span className="info-label">Available Sessions</span>
               <span className="info-value" style={{ 
@@ -1938,10 +1944,18 @@ export default function QR() {
                 {(rawStudent?.payment?.numberOfSessions || 0)} sessions
               </span>
             </div>
+            )}
             {isScoringEnabled && (
-            <div className="info-item">
-              <span className="info-label">Score</span>
-              <span className="info-value">{rawStudent?.score !== null && rawStudent?.score !== undefined ? rawStudent.score : 0}</span>
+            <div className="info-item" style={{ borderLeft: '4px solid #f59e0b' }}>
+              <span className="info-label">SCORE</span>
+              <span className="info-value" style={{ 
+                fontSize: '1.4rem', 
+                fontWeight: '800',
+                color: (rawStudent?.score !== undefined && rawStudent?.score !== null && rawStudent?.score >= 0) ? '#059669' : '#dc2626'
+              }}>
+                {rawStudent?.score !== null && rawStudent?.score !== undefined ? rawStudent.score : 0}
+                <span style={{ fontSize: '0.8rem', fontWeight: '500', color: '#6c757d', marginLeft: '6px' }}>pts</span>
+              </span>
             </div>
             )}
             {student.main_comment && (

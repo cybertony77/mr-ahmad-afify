@@ -75,10 +75,16 @@ export default async function handler(req, res) {
       });
     }
 
+    // Determine upload folder (default to quizzes-questions-images for backwards compatibility)
+    const ALLOWED_FOLDERS = ['quizzes-questions-images', 'mock-exams-questions-images'];
+    const uploadFolder = req.body.folder && ALLOWED_FOLDERS.includes(req.body.folder) 
+      ? req.body.folder 
+      : 'quizzes-questions-images';
+
     // Upload to Cloudinary as private
     // Cloudinary accepts data URI format: data:[<mediatype>][;base64],<data>
     const uploadResult = await cloudinary.uploader.upload(file, {
-      folder: 'quizzes-questions-images',
+      folder: uploadFolder,
       resource_type: 'image',
       type: 'private', // Store as private
       overwrite: false,

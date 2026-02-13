@@ -8,6 +8,9 @@ export default function Dashboard() {
   const [userRole, setUserRole] = useState("");
   const { data: systemConfig } = useSystemConfig();
   const isWhatsAppJoinGroupEnabled = systemConfig?.whatsapp_join_group_btn === true || systemConfig?.whatsapp_join_group_btn === 'true';
+  const isMockExamsEnabled = systemConfig?.mock_exams === true || systemConfig?.mock_exams === 'true';
+  const isZoomJoinMeetingEnabled = systemConfig?.zoom_join_meeting === true || systemConfig?.zoom_join_meeting === 'true';
+  const isPaymentSystemEnabled = systemConfig?.payment_system === true || systemConfig?.payment_system === 'true';
 
   useEffect(() => {
     // Authentication is now handled by _app.js with HTTP-only cookies
@@ -76,6 +79,14 @@ export default function Dashboard() {
         .dashboard-btn:disabled {
           opacity: 0.6;
           cursor: not-allowed;
+        }
+        .dashboard-btn.zoom-btn {
+          background: linear-gradient(90deg, #2d8cff 0%, #1a6fdb 100%);
+          box-shadow: 0 4px 16px rgba(45, 140, 255, 0.3);
+        }
+        .dashboard-btn.zoom-btn:hover:not(:disabled) {
+          background: linear-gradient(90deg, #1a6fdb 0%, #2d8cff 100%);
+          box-shadow: 0 8px 25px rgba(45, 140, 255, 0.4);
         }
         .dashboard-btn.whatsapp-btn {
           background: linear-gradient(90deg, #25D366 0%, #128C7E 100%);
@@ -158,6 +169,7 @@ export default function Dashboard() {
           <Image src="/trash2.svg" alt="Delete Student" width={20} height={20} />
           Delete Student
         </button>
+        {isPaymentSystemEnabled && (
         <button
           className="dashboard-btn"
           onClick={() => router.push("/dashboard/payment")}
@@ -166,6 +178,17 @@ export default function Dashboard() {
           <Image src="/money.svg" alt="Payment" width={25} height={25} />
           Payment
         </button>
+        )}
+        {isMockExamsEnabled && (
+          <button
+            className="dashboard-btn"
+            onClick={() => router.push("/dashboard/mock_exam")}
+            style={{ background: "linear-gradient(90deg, #6f42c1 0%, #8e44ad 100%)" }}
+          >
+            <Image src="/exam.svg" alt="Mock Exam" width={20} height={20} />
+            Mock Exam
+          </button>
+        )}
         <button
           className="dashboard-btn"
           onClick={() => router.push("/dashboard/qr_generator")}
@@ -201,6 +224,15 @@ export default function Dashboard() {
           <Image src="/history.svg" alt="History" width={20} height={20} />
           History
         </button>
+        {isZoomJoinMeetingEnabled && (
+          <button
+            className="dashboard-btn zoom-btn"
+            onClick={() => router.push("/dashboard/join_zoom_meeting")}
+          >
+            <Image src="/zoom.svg" alt="Zoom" width={20} height={20} />
+            Join Zoom Meeting
+          </button>
+        )}
         {isWhatsAppJoinGroupEnabled && (
           <button
             className="dashboard-btn whatsapp-btn"

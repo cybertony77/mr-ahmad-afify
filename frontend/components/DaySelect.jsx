@@ -59,7 +59,9 @@ export default function DaySelect({ selectedDay, onDayChange, required = false, 
                 cursor: 'pointer',
                 borderBottom: '1px solid #f8f9fa',
                 transition: 'background-color 0.2s ease',
-                color: '#000000'
+                color: selectedDay === day ? '#1FA8DC' : '#000000',
+                backgroundColor: selectedDay === day ? '#f0f8ff' : '#ffffff',
+                fontWeight: selectedDay === day ? '600' : '400'
               }}
               onClick={() => handleDaySelect(day)}
               onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}

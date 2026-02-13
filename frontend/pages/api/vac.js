@@ -49,7 +49,7 @@ export default async function handler(req, res) {
       const db = client.db(DB_NAME);
 
     // Check if pagination parameters are provided
-    const { page, limit, search, sortBy, sortOrder } = req.query;
+    const { page, limit, search, sortBy, sortOrder, vac_activated } = req.query;
     const hasPagination = page || limit;
 
     if (hasPagination) {
@@ -102,6 +102,18 @@ export default async function handler(req, res) {
         }
       }
 
+      // Apply VAC_activated filter if provided
+      if (vac_activated !== undefined && vac_activated !== '') {
+        if (vac_activated === 'true') {
+          vacQueryFilter.VAC_activated = true;
+        } else if (vac_activated === 'false') {
+          vacQueryFilter.$or = [
+            { VAC_activated: false },
+            { VAC_activated: { $exists: false } }
+          ];
+        }
+      }
+
       // Get total count for pagination
       const totalCount = await db.collection('VAC').countDocuments(vacQueryFilter);
       const totalPages = Math.ceil(totalCount / pageSize);
@@ -119,7 +131,7 @@ export default async function handler(req, res) {
       const accountIds = vacRecords.map(vac => vac.account_id);
       const students = await db.collection('students')
         .find({ id: { $in: accountIds } })
-        .project({ id: 1, name: 1, phone: 1 })
+        .project({ id: 1, name: 1, phone: 1, parentsPhone: 1 })
         .toArray();
 
       // Create a map of account_id to student data
@@ -127,7 +139,8 @@ export default async function handler(req, res) {
       students.forEach(student => {
         studentMap[student.id] = {
           name: student.name,
-          phone: student.phone || null
+          phone: student.phone || null,
+          parents_phone: student.parentsPhone || null
         };
       });
 
@@ -137,7 +150,8 @@ export default async function handler(req, res) {
         VAC: vac.VAC,
         VAC_activated: vac.VAC_activated || false,
         name: studentMap[vac.account_id]?.name || null,
-        phone: studentMap[vac.account_id]?.phone || null
+        phone: studentMap[vac.account_id]?.phone || null,
+        parents_phone: studentMap[vac.account_id]?.parents_phone || null
       }));
 
       return res.status(200).json({

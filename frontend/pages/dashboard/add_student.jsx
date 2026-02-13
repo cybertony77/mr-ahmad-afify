@@ -737,6 +737,17 @@ Best regards
               />
             </div>
             <div className="form-group">
+              <label>Grade (Optional)</label>
+              <input
+                className="form-input"
+                name="grade"
+                placeholder="Enter student's grade (e.g. 1st Secondary)"
+                value={form.grade}
+                onChange={handleChange}
+                autocomplete="off"
+              />
+            </div>
+            <div className="form-group">
               <label>Course <span style={{color: 'red'}}>*</span></label>
               <GradeSelect 
                 selectedGrade={form.course} 

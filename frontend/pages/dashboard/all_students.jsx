@@ -58,6 +58,7 @@ export function InputWithButton({ onButtonClick, onKeyDown, ...props }) {
 export default function AllStudents() {
   const { data: systemConfig } = useSystemConfig();
   const isScoringEnabled = systemConfig?.scoring_system === true || systemConfig?.scoring_system === 'true';
+  const isPaymentSystemEnabled = systemConfig?.payment_system === true || systemConfig?.payment_system === 'true';
   
   const router = useRouter();
   const containerRef = useRef(null);
@@ -399,6 +400,7 @@ export default function AllStudents() {
             showSchool={true}
             showAccountStatus={true}
             showScore={isScoringEnabled}
+            showPayment={isPaymentSystemEnabled}
             showGender={true}
             showComment={false}
             showMainComment={false}

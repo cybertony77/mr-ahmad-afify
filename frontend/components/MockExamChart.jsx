@@ -58,7 +58,8 @@ export default function MockExamChart({ mockExams }) {
     exam: exam.exam,
     percentage: exam.percentage,
     examDegree: exam.examDegree,
-    outOf: exam.outOf
+    outOf: exam.outOf,
+    result: exam.result || null
   }));
 
   return (
@@ -96,10 +97,13 @@ export default function MockExamChart({ mockExams }) {
               const percentage = value.toFixed(1);
               const examDegree = props.payload.examDegree;
               const outOf = props.payload.outOf;
+              const result = props.payload.result;
+              // Show degree from examDegree/outOf or from result string
+              const degreeDisplay = (examDegree && outOf) ? `${examDegree} / ${outOf}` : (result && result !== '0 / 0' ? result : null);
               return [
                 <div key="tooltip" style={{ color: '#000000' }}>
                   <div><strong style={{ color: '#000000' }}>Exam:</strong> {exam}</div>
-                  {examDegree && outOf && <div><strong style={{ color: '#000000' }}>Degree:</strong> {examDegree} / {outOf}</div>}
+                  {degreeDisplay && <div><strong style={{ color: '#000000' }}>Degree:</strong> {degreeDisplay}</div>}
                   <div><strong style={{ color: '#000000' }}>Percentage:</strong> {percentage}%</div>
                 </div>
               ];

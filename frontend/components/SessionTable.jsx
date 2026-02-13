@@ -26,6 +26,7 @@ export function SessionTable({
   showAccountStatus = false,
   showGender = false,
   showScore = false,
+  showPayment = true,
   onMessageStateChange,
   onScoreUpdate,
   showStatsColumns = false,
@@ -312,6 +313,7 @@ export function SessionTable({
           />
         </Table.Td>
       )}
+      {showPayment && (
       <Table.Td style={{ textAlign: 'center', width: '140px', minWidth: '140px', fontSize: '15px', fontWeight: '600', color: (() => {
         const sessions = student.payment?.numberOfSessions !== null && student.payment?.numberOfSessions !== undefined ? student.payment.numberOfSessions : 0;
         if (sessions <= 2) return '#dc3545'; // red
@@ -321,6 +323,7 @@ export function SessionTable({
       })() }}>
         {student.payment?.numberOfSessions !== null && student.payment?.numberOfSessions !== undefined ? student.payment.numberOfSessions : 0}
       </Table.Td>
+      )}
       {showScore && (
         <Table.Td style={{ textAlign: 'center', width: '100px', minWidth: '100px', fontSize: '15px', fontWeight: '600', color: '#1FA8DC' }}>
           {student.score !== null && student.score !== undefined ? student.score : 0}
@@ -362,7 +365,7 @@ export function SessionTable({
       if (showComment || showWeekComment) baseWidth += 160; // Week Comment
       if (showMessageState) baseWidth += 80; // Message State column
       if (showWhatsApp && data.length > 0) baseWidth += 80; // WhatsApp column
-      baseWidth += 140; // Available Sessions column
+      if (showPayment) baseWidth += 140; // Available Sessions column
       if (showScore) baseWidth += 80; // Score column
       baseWidth += 500; // Statistics columns (140 + 160 + 200)
       return baseWidth;
@@ -388,7 +391,7 @@ export function SessionTable({
       if (showComment || showWeekComment) baseWidth += 160; // Week Comment
       if (showMessageState) baseWidth += 120; // Message State column
       if (showWhatsApp && data.length > 0) baseWidth += 120; // WhatsApp Message
-      baseWidth += 140; // Available Sessions column
+      if (showPayment) baseWidth += 140; // Available Sessions column
       if (showScore) baseWidth += 100; // Score column
       return baseWidth;
     }
@@ -418,7 +421,7 @@ export function SessionTable({
           {(showComment || showWeekComment) && <Table.Th style={{ minWidth: data.length === 0 ? '120px' : '160px', width: '160px', textAlign: 'center' }}>Parent Comment</Table.Th>}
           {showMessageState && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '120px', width: '120px', textAlign: 'center' }}>Message State</Table.Th>}
           {showWhatsApp && data.length > 0 && <Table.Th style={{ minWidth: data.length === 0 ? '70px' : '120px', width: '120px', textAlign: 'center' }}>WhatsApp Message</Table.Th>}
-          <Table.Th style={{ minWidth: data.length === 0 ? '100px' : '140px', width: '140px', textAlign: 'center' }}>Available Sessions</Table.Th>
+          {showPayment && <Table.Th style={{ minWidth: data.length === 0 ? '100px' : '140px', width: '140px', textAlign: 'center' }}>Available Sessions</Table.Th>}
           {showScore && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '100px', width: '100px', textAlign: 'center' }}>Score</Table.Th>}
           <Table.Th style={{ minWidth: data.length === 0 ? '100px' : '140px', width: '140px', textAlign: 'center' }}>Total Absent Sessions</Table.Th>
           <Table.Th style={{ minWidth: data.length === 0 ? '120px' : '160px', width: '160px', textAlign: 'center' }}>Total Missing Homework</Table.Th>

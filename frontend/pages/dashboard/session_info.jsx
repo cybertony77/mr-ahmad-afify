@@ -17,6 +17,7 @@ import LoadingSkeleton from '../../components/LoadingSkeleton';
 export default function SessionInfo() {
   const { data: systemConfig } = useSystemConfig();
   const isScoringEnabled = systemConfig?.scoring_system === true || systemConfig?.scoring_system === 'true';
+  const isPaymentSystemEnabled = systemConfig?.payment_system === true || systemConfig?.payment_system === 'true';
   
   const containerRef = useRef(null);
   const router = useRouter();
@@ -208,6 +209,7 @@ export default function SessionInfo() {
         comment: null,
         message_state: false, // Default to false for non-existent lessons
         // Store the lesson name for WhatsApp button to use
+        attendanceLesson: lessonName,
         currentLesson: lessonName
       };
     }
@@ -223,6 +225,7 @@ export default function SessionInfo() {
       comment: lessonData.comment || null,
       message_state: lessonData.message_state || false,
       // Store the lesson name for WhatsApp button to use
+      attendanceLesson: lessonName,
       currentLesson: lessonName
     };
   };
@@ -1077,6 +1080,7 @@ export default function SessionInfo() {
             showCourse={true}
             showCourseType={true}
             showScore={isScoringEnabled}
+            showPayment={isPaymentSystemEnabled}
             emptyMessage={selectedLesson ? 
               `No students attended in ${selectedCenter} for ${selectedCourseType} in ${selectedLesson}.` :
               `No students found for selected course type and center.`
@@ -1159,6 +1163,7 @@ export default function SessionInfo() {
             showHW={showHW}
             showHomeworkVideo={false}
             showScore={isScoringEnabled}
+            showPayment={isPaymentSystemEnabled}
             emptyMessage={selectedLesson ? 
               `No Absences in ${selectedCenter} for ${selectedCourseType} in ${selectedLesson}.` :
               `No students found for selected course type and center.`
@@ -1243,6 +1248,7 @@ export default function SessionInfo() {
             showHW={showHW}
             showHomeworkVideo={false}
             showScore={isScoringEnabled}
+            showPayment={isPaymentSystemEnabled}
             emptyMessage={selectedLesson ? 
               `No students attended in another center in ${selectedLesson}.` :
               `No students found for selected course type and center.`

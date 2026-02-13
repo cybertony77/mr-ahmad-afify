@@ -101,7 +101,9 @@ export default function DurationSelect({
                 cursor: 'pointer',
                 borderBottom: '1px solid #f8f9fa',
                 transition: 'background-color 0.2s ease',
-                color: '#000000'
+                color: selectedValue === option.value ? '#1FA8DC' : '#000000',
+                backgroundColor: selectedValue === option.value ? '#f0f8ff' : '#ffffff',
+                fontWeight: selectedValue === option.value ? '600' : '400'
               }}
               onClick={() => handleSelect(option.value)}
               onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}

@@ -24,7 +24,7 @@ const WhatsAppButton = ({ student, onMessageSent, onScoreUpdate }) => {
         setMessage('Missing or invalid parent phone number');
         setTimeout(() => setMessage(''), 3000);
         // Update database to mark as failed
-        const lessonName = student.attendanceLesson || (student.lessons && Object.keys(student.lessons).length > 0 ? Object.keys(student.lessons)[0] : 'N/A');
+        const lessonName = student.attendanceLesson || student.currentLesson || (student.lessons && Object.keys(student.lessons).length > 0 ? Object.keys(student.lessons)[0] : 'N/A');
         updateMessageStateMutation.mutate({ id: student.id, message_state: false, lesson: lessonName });
         return;
       }
@@ -41,7 +41,7 @@ const WhatsAppButton = ({ student, onMessageSent, onScoreUpdate }) => {
       if (!startsWithEgyptPrefix && !hasCountryCode) {
         setMessage('Country code required. Please add country code (e.g., 20 for Egypt)');
         setTimeout(() => setMessage(''), 3000);
-        const lessonName = student.attendanceLesson || (student.lessons && Object.keys(student.lessons).length > 0 ? Object.keys(student.lessons)[0] : 'N/A');
+        const lessonName = student.attendanceLesson || student.currentLesson || (student.lessons && Object.keys(student.lessons).length > 0 ? Object.keys(student.lessons)[0] : 'N/A');
         updateMessageStateMutation.mutate({ id: student.id, message_state: false, lesson: lessonName });
         return;
       }
@@ -56,13 +56,13 @@ const WhatsAppButton = ({ student, onMessageSent, onScoreUpdate }) => {
         setMessage('Student data incomplete - missing name');
         setTimeout(() => setMessage(''), 3000);
         // Update database to mark as failed
-        const lessonName = student.attendanceLesson || (student.lessons && Object.keys(student.lessons).length > 0 ? Object.keys(student.lessons)[0] : 'N/A');
+        const lessonName = student.attendanceLesson || student.currentLesson || (student.lessons && Object.keys(student.lessons).length > 0 ? Object.keys(student.lessons)[0] : 'N/A');
         updateMessageStateMutation.mutate({ id: student.id, message_state: false, lesson: lessonName });
         return;
       }
 
-      // Get current lesson data - assume we're working with the current lesson data
-      const currentLessonName = student.attendanceLesson || (student.lessons && Object.keys(student.lessons).length > 0 ? Object.keys(student.lessons)[0] : null);
+      // Get current lesson data - check attendanceLesson, currentLesson, then fallback to first lesson key
+      const currentLessonName = student.attendanceLesson || student.currentLesson || (student.lessons && Object.keys(student.lessons).length > 0 ? Object.keys(student.lessons)[0] : null);
       const lessonName = currentLessonName || 'N/A'; // Use for API calls
       const lessonData = currentLessonName && student.lessons && typeof student.lessons === 'object' ? student.lessons[currentLessonName] : null;
       const currentLesson = {
@@ -73,6 +73,57 @@ const WhatsAppButton = ({ student, onMessageSent, onScoreUpdate }) => {
         quizDegree: (student.quizDegree || (lessonData ? lessonData.quizDegree : null)) ?? null
       };
 
+
+      // Get previous lesson data (the lesson before the current one)
+      const lessonKeys = Object.keys(student.lessons || {});
+      const currentIndex = lessonKeys.findIndex(
+        key => key.trim().toLowerCase() === lessonName.trim().toLowerCase()
+      );
+
+      let previousLesson = null;
+      if (currentIndex > 0) {
+        const prevLessonName = lessonKeys[currentIndex - 1];
+        previousLesson = student.lessons[prevLessonName];
+        console.log(`Previous lesson found: ${prevLessonName}`, previousLesson);
+      } else {
+        console.log(`No previous lesson found for ${lessonName}`);
+      }
+
+      // Compute previous homework and quiz from previous lesson
+      let previousAssignment = null;
+      let previousQuizDegree = null;
+
+      if (previousLesson) {
+        if (previousLesson.hwDone === true) {
+          if (
+            previousLesson.homework_degree !== null &&
+            previousLesson.homework_degree !== undefined &&
+            String(previousLesson.homework_degree).trim() !== ''
+          ) {
+            previousAssignment = `Done (${previousLesson.homework_degree})`;
+          } else {
+            previousAssignment = 'Done';
+          }
+        } else if (previousLesson.hwDone === false) {
+          previousAssignment = 'Not Done';
+        } else if (previousLesson.hwDone === 'No Homework') {
+          previousAssignment = 'No Homework';
+        } else if (previousLesson.hwDone === 'Not Completed') {
+          previousAssignment = 'Not Completed';
+        } else {
+          previousAssignment = 'Not Done';
+        }
+
+        if (
+          previousLesson.quizDegree !== null &&
+          previousLesson.quizDegree !== undefined &&
+          String(previousLesson.quizDegree).trim() !== ''
+        ) {
+          previousQuizDegree = previousLesson.quizDegree;
+        }
+
+        console.log(`Previous assignment: ${previousAssignment}, Previous quiz: ${previousQuizDegree}`);
+      }
 
       // Create the message using the specified format
       // Extract first name from full name
@@ -85,34 +136,15 @@ We want to inform you that we are in:
   • Lesson: ${lessonName}
   • Attendance Info: ${currentLesson.attended ? `${currentLesson.lastAttendance}` : 'Absent'}`;
 
-      // Only show attendance-related info if student attended
-      if (currentLesson.attended) {
-        // Format homework status properly
-        let homeworkStatus = '';
-        if (student.hwDone === true) {
-          // Show homework degree if it exists
-          const hwDegree = currentLesson.hwDegree;
-          if (hwDegree && String(hwDegree).trim() !== '') {
-            homeworkStatus = `Done (${hwDegree})`;
-          } else {
-          homeworkStatus = 'Done';
-          }
-        } else if (student.hwDone === false) {
-          homeworkStatus = 'Not Done';
-        } else if (student.hwDone === 'No Homework') {
-          homeworkStatus = 'No Homework';
-        } else if (student.hwDone === 'Not Completed') {
-          homeworkStatus = 'Not Completed';
-        } else {
-          homeworkStatus = 'Not Done'; // Default fallback
-        }
-        
-        whatsappMessage += `
-  • Homework: ${homeworkStatus}`;
-  
-        if (currentLesson.quizDegree !== null && String(currentLesson.quizDegree).trim() !== '') {
+      // Add previous lesson homework and quiz if available
+      if (previousAssignment || previousQuizDegree) {
+        if (previousAssignment) {
           whatsappMessage += `
-  • Quiz Degree: ${currentLesson.quizDegree}`;
+  • Previous Assignment: ${previousAssignment}`;
+        }
+        if (previousQuizDegree) {
+          whatsappMessage += `
+  • Previous Quiz Degree: ${previousQuizDegree}`;
         }
       }
       
@@ -128,6 +160,8 @@ We want to inform you that we are in:
       // Generate public link with HMAC
       const publicLink = generatePublicStudentLink(student.id.toString());
 
+      const isPaymentSystemEnabled = systemConfig?.payment_system === true || systemConfig?.payment_system === 'true';
+
       whatsappMessage += `
 
 Please visit the following link to check ${firstName}'s grades and progress: ⬇️
@@ -135,7 +169,10 @@ Please visit the following link to check ${firstName}'s grades and progress: ⬇
 🖇️ ${publicLink}
 
 Note :-
-  • ${firstName}'s ID: ${student.id}
+  • ${firstName}'s ID: ${student.id}${isPaymentSystemEnabled ? `
+  • Number of Remaining Sessions: ${student.payment?.numberOfSessions ?? 0}${(student.payment?.numberOfSessions ?? 0) <= 2 ? `
+
+*Please renew to continue your sessions without interruption.*` : ''}` : ''}
 
 We wish ${firstName} gets high scores 😊❤
 
@@ -175,94 +212,18 @@ We wish ${firstName} gets high scores 😊❤
       console.log('Student data:', { id: student.id, attendanceLesson: student.attendanceLesson, name: student.name });
       console.log('Student lessons data:', student.lessons);
       
+      // Find previous lesson name for scoring context
+      const prevLessonName = currentIndex > 0 ? lessonKeys[currentIndex - 1] : null;
+
+      // Run message_state update and scoring in parallel (don't block on mutation)
+      // 1. Update message_state in database
       updateMessageStateMutation.mutate(
         { id: student.id, message_state: true, lesson: lessonName },
         {
-          onSuccess: async () => {
-            console.log('Message state updated successfully in database');
-            // Also call the parent callback for any additional local state management
+          onSuccess: () => {
+            console.log('Message state updated successfully in database for lesson:', lessonName);
             if (onMessageSent) {
               onMessageSent(student.id, true);
-            }
-            
-            // Calculate score for absent student (when message is sent to parent)
-            // Only if student is absent and scoring system is enabled
-            if (!currentLesson.attended && isScoringEnabled) {
-              try {
-                // Get previous attendance status from history
-                let previousStatus = null;
-                try {
-                  const historyResponse = await apiClient.post('/api/scoring/get-last-history', {
-                    studentId: student.id,
-                    type: 'attendance',
-                    lesson: lessonName
-                  });
-                  
-                  if (historyResponse.data.found && historyResponse.data.history) {
-                    previousStatus = historyResponse.data.history.data?.status;
-                  }
-                } catch (historyErr) {
-                  console.error('Error getting attendance history:', historyErr);
-                }
-                
-                await apiClient.post('/api/scoring/calculate', {
-                  studentId: student.id,
-                  type: 'attendance',
-                  lesson: lessonName,
-                  data: { 
-                    status: 'absent',
-                    previousStatus: previousStatus
-                  }
-                });
-                // Trigger score update callback
-                if (onScoreUpdate) {
-                  onScoreUpdate();
-                }
-              } catch (err) {
-                console.error('Error calculating absent score:', err);
-              }
-            }
-            
-            // Calculate score for homework "Not Done" (when hwDone is false)
-            // Only if hwDone is false (not "Not Completed" or "No Homework") and scoring system is enabled
-            if (currentLesson.hwDone === false && isScoringEnabled) {
-              try {
-                // Get previous homework state from history
-                let previousHwDone = null;
-                try {
-                  const historyResponse = await apiClient.post('/api/scoring/get-last-history', {
-                    studentId: student.id,
-                    type: 'homework',
-                    lesson: lessonName
-                  });
-                  
-                  if (historyResponse.data.found && historyResponse.data.history) {
-                    const lastHistory = historyResponse.data.history;
-                    if (lastHistory.data?.hwDone !== undefined) {
-                      previousHwDone = lastHistory.data.hwDone;
-                    }
-                  }
-                } catch (historyErr) {
-                  console.error('Error getting homework history:', historyErr);
-                }
-                
-                await apiClient.post('/api/scoring/calculate', {
-                  studentId: student.id,
-                  type: 'homework',
-                  lesson: lessonName,
-                  data: { 
-                    hwDone: false,
-                    previousHwDone: previousHwDone
-                  }
-                });
-                console.log('Homework "Not Done" score calculated for student:', student.id);
-                // Trigger score update callback
-                if (onScoreUpdate) {
-                  onScoreUpdate();
-                }
-              } catch (err) {
-                console.error('Error calculating homework "Not Done" score:', err);
-              }
             }
           },
           onError: (error) => {
@@ -270,10 +231,101 @@ We wish ${firstName} gets high scores 😊❤
             console.error('Error details:', error.response?.data || error.message);
             setMessage('WhatsApp sent but failed to update status');
             setTimeout(() => setMessage(''), 3000);
-            // Don't call onMessageSent if database update fails
           }
         }
       );
+
+      // 2. Apply scoring rules (async, fire-and-forget)
+      // IMPORTANT: Check scoring_system_history first to prevent duplicate scoring on multiple clicks
+      if (isScoringEnabled) {
+        (async () => {
+          try {
+            let scoreUpdated = false;
+
+            // === ATTENDANCE: Apply absent scoring on CURRENT lesson (attend=false) ===
+            if (!currentLesson.attended) {
+              try {
+                // Check if absent scoring was already applied for this student+lesson
+                const historyResponse = await apiClient.post('/api/scoring/get-last-history', {
+                  studentId: student.id,
+                  type: 'attendance',
+                  lesson: lessonName
+                });
+
+                const alreadyApplied = historyResponse.data.found && 
+                  historyResponse.data.history?.data?.status === 'absent';
+
+                if (alreadyApplied) {
+                  console.log(`[SCORING] Absent scoring already applied for student ${student.id}, lesson "${lessonName}" — skipping to prevent duplicate`);
+                } else {
+                  // Get previous status for proper score calculation
+                  const previousStatus = historyResponse.data.found 
+                    ? historyResponse.data.history?.data?.status 
+                    : null;
+
+                  await apiClient.post('/api/scoring/calculate', {
+                    studentId: student.id,
+                    type: 'attendance',
+                    lesson: lessonName,
+                    data: {
+                      status: 'absent',
+                      previousStatus: previousStatus
+                    }
+                  });
+                  console.log(`[SCORING] Absent score applied for student ${student.id}, lesson "${lessonName}"`);
+                  scoreUpdated = true;
+                }
+              } catch (err) {
+                console.error('Error calculating absent score:', err);
+              }
+            }
+
+            // === HOMEWORK: Apply hwDone=false scoring on PREVIOUS lesson ===
+            if (previousLesson && previousLesson.hwDone === false && prevLessonName) {
+              try {
+                // Check if homework "Not Done" scoring was already applied for this student+prevLesson
+                const historyResponse = await apiClient.post('/api/scoring/get-last-history', {
+                  studentId: student.id,
+                  type: 'homework',
+                  lesson: prevLessonName
+                });
+
+                const alreadyApplied = historyResponse.data.found && 
+                  historyResponse.data.history?.data?.hwDone === false;
+
+                if (alreadyApplied) {
+                  console.log(`[SCORING] Homework "Not Done" scoring already applied for student ${student.id}, previous lesson "${prevLessonName}" — skipping to prevent duplicate`);
+                } else {
+                  // Get previous hwDone state for proper score calculation
+                  const previousHwDone = historyResponse.data.found 
+                    ? (historyResponse.data.history?.data?.hwDone !== undefined ? historyResponse.data.history.data.hwDone : null)
+                    : null;
+
+                  await apiClient.post('/api/scoring/calculate', {
+                    studentId: student.id,
+                    type: 'homework',
+                    lesson: prevLessonName,
+                    data: {
+                      hwDone: false,
+                      previousHwDone: previousHwDone
+                    }
+                  });
+                  console.log(`[SCORING] Homework "Not Done" score applied for student ${student.id}, previous lesson "${prevLessonName}"`);
+                  scoreUpdated = true;
+                }
+              } catch (err) {
+                console.error('Error calculating homework "Not Done" score:', err);
+              }
+            }
+
+            if (scoreUpdated && onScoreUpdate) {
+              onScoreUpdate();
+            }
+          } catch (err) {
+            console.error('Error in scoring calculations:', err);
+          }
+        })();
+      }
       
       setTimeout(() => setMessage(''), 3000);
 
@@ -283,7 +335,7 @@ We wish ${firstName} gets high scores 😊❤
       setMessage('Error occurred while opening WhatsApp');
       setTimeout(() => setMessage(''), 3000);
       // Update database to mark as failed
-      const lessonName = student.attendanceLesson || (student.lessons && Object.keys(student.lessons).length > 0 ? Object.keys(student.lessons)[0] : 'N/A');
+      const lessonName = student.attendanceLesson || student.currentLesson || (student.lessons && Object.keys(student.lessons).length > 0 ? Object.keys(student.lessons)[0] : 'N/A');
       updateMessageStateMutation.mutate({ id: student.id, message_state: false, lesson: lessonName });
     }
   };
@@ -308,7 +360,7 @@ We wish ${firstName} gets high scores 😊❤
           boxShadow: '0 2px 4px rgba(37, 211, 102, 0.2)'
         }}
         onMouseEnter={(e) => {
-          e.target.style.backgroundColor = '#128C7E';
+          e.target.style.backgroundColor = '#25D366';
           e.target.style.transform = 'translateY(-1px)';
           e.target.style.boxShadow = '0 4px 8px rgba(37, 211, 102, 0.3)';
         }}

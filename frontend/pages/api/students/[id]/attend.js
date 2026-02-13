@@ -34,6 +34,7 @@ const envConfig = loadEnvConfig();
 const JWT_SECRET = envConfig.JWT_SECRET || process.env.JWT_SECRET || 'topphysics_secret';
 const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/topphysics';
 const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'topphysics';
+const PAYMENT_SYSTEM_ENABLED = envConfig.SYSTEM_PAYMENT_SYSTEM === 'true' || process.env.SYSTEM_PAYMENT_SYSTEM === 'true';
 
 console.log('🔗 Using Mongo URI:', MONGO_URI);
 
@@ -139,11 +140,11 @@ export default async function handler(req, res) {
     await ensureLessonExists();
     
     if (attended) {
-      // Check if student has available sessions or if this lesson is already paid
+      // Check if student has available sessions or if this lesson is already paid (only if payment system is enabled)
       const currentSessions = student.payment?.numberOfSessions || 0;
       const isLessonPaid = student.lessons && student.lessons[lessonName] && student.lessons[lessonName].paid === true;
       
-      if (currentSessions <= 0 && !isLessonPaid) {
+      if (PAYMENT_SYSTEM_ENABLED && currentSessions <= 0 && !isLessonPaid) {
         console.log('❌ Student has no available sessions and lesson is not paid:', student_id);
         return res.status(400).json({ error: 'No available sessions' });
       }
@@ -164,8 +165,8 @@ export default async function handler(req, res) {
         [`lessons.${lessonName}.paid`]: true
       };
       
-      // Only decrement sessions if lesson wasn't already paid
-      if (!isLessonPaid && currentSessions > 0) {
+      // Only decrement sessions if payment system is enabled and lesson wasn't already paid
+      if (PAYMENT_SYSTEM_ENABLED && !isLessonPaid && currentSessions > 0) {
         updateQuery['payment.numberOfSessions'] = currentSessions - 1;
       }
       
@@ -212,8 +213,8 @@ export default async function handler(req, res) {
         [`lessons.${lessonName}.paid`]: false
       };
       
-      // Only increment sessions back if the lesson was paid (meaning it consumed a session)
-      if (wasLessonPaid) {
+      // Only increment sessions back if payment system is enabled and the lesson was paid (meaning it consumed a session)
+      if (PAYMENT_SYSTEM_ENABLED && wasLessonPaid) {
         updateQuery['payment.numberOfSessions'] = currentSessions + 1;
       }
       

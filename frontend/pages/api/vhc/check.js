@@ -32,6 +32,7 @@ function loadEnvConfig() {
 const envConfig = loadEnvConfig();
 const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI;
 const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME;
+const PAYMENT_SYSTEM_ENABLED = envConfig.SYSTEM_PAYMENT_SYSTEM === 'true' || process.env.SYSTEM_PAYMENT_SYSTEM === 'true';
 
 // Format date as DD/MM/YYYY
 function formatDate(date) {
@@ -251,6 +252,22 @@ export default async function handler(req, res) {
           { id: studentId },
           { $push: { weeks: newWeek } }
         );
+      }
+    }
+
+    // Deduct 1 from student.payment.numberOfSessions if payment system is enabled, video is paid and sessions > 0
+    if (PAYMENT_SYSTEM_ENABLED && session && session.payment_state === 'paid') {
+      try {
+        const currentSessions = student.payment?.numberOfSessions || 0;
+        if (currentSessions > 0) {
+          await db.collection('students').updateOne(
+            { id: studentId },
+            { $inc: { 'payment.numberOfSessions': -1 } }
+          );
+        }
+      } catch (sessionErr) {
+        console.error('⚠️ Failed to deduct numberOfSessions:', sessionErr);
+        // Don't fail the VHC check if session deduction fails
       }
     }
 

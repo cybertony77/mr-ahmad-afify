@@ -3,7 +3,7 @@ import HwChart from "./HwChart";
 import QuizChart from "./QuizChart";
 import MockExamChart from "./MockExamChart";
 
-export default function ChartTabs({ lessons, mockExams }) {
+export default function ChartTabs({ lessons, mockExams, onlineMockExams, mockExamChartData }) {
   const [active, setActive] = useState('hw');
 
   const normalizedLessons = useMemo(() => {
@@ -16,16 +16,74 @@ export default function ChartTabs({ lessons, mockExams }) {
   }, [lessons]);
 
   const normalizedMockExams = useMemo(() => {
-    // Ensure mockExams are in array format for chart
-    if (!mockExams || !Array.isArray(mockExams)) return [];
-    return mockExams.map((exam, index) => ({
-      exam: `Exam ${index + 1}`,
-      percentage: exam?.percentage || 0,
-      examDegree: exam?.examDegree || 0,
-      outOf: exam?.outOf || 0,
-      date: exam?.date || null
-    })).filter(exam => exam.percentage > 0 || exam.examDegree > 0);
-  }, [mockExams]);
+    // If API chart data is provided, use it directly (same logic as mock-exam-performance API)
+    if (mockExamChartData && Array.isArray(mockExamChartData) && mockExamChartData.length > 0) {
+      return mockExamChartData.map(item => ({
+        exam: item.lesson_name || item.lesson || 'Unknown',
+        percentage: item.percentage || 0,
+        examDegree: null,
+        outOf: null,
+        result: item.result || '0 / 0',
+        date: null
+      })).sort((a, b) => {
+        const numA = parseInt((a.exam.match(/\d+/) || [0])[0], 10) || 0;
+        const numB = parseInt((b.exam.match(/\d+/) || [0])[0], 10) || 0;
+        return numA - numB;
+      });
+    }
+
+    // Fallback: build from onlineMockExams + mockExams props
+    const examDataMap = {}; // keyed by exam label like "Exam 1"
+
+    // First, populate from online_mock_exams (higher priority)
+    if (onlineMockExams && Array.isArray(onlineMockExams) && onlineMockExams.length > 0) {
+      onlineMockExams.forEach(ome => {
+        const lesson = ome.lesson || '';
+        const examMatch = lesson.match(/Exam\s+(\d+)/i);
+        if (examMatch) {
+          const examLabel = `Exam ${examMatch[1]}`;
+          const percentageNum = parseInt((ome.percentage || '0').toString().replace('%', ''), 10) || 0;
+          // Parse result string "5 / 10"
+          const resultParts = (ome.result || '0 / 0').split('/').map(s => s.trim());
+          const correctCount = parseInt(resultParts[0], 10) || 0;
+          const totalQuestions = parseInt(resultParts[1], 10) || 0;
+          
+          // Only use the latest result for each exam (last one in array)
+          examDataMap[examLabel] = {
+            exam: examLabel,
+            percentage: percentageNum,
+            examDegree: correctCount,
+            outOf: totalQuestions,
+            date: ome.date_of_end || ome.date_of_start || null
+          };
+        }
+      });
+    }
+
+    // Then, fill in from mockExams array (lower priority - only for exams not already covered)
+    if (mockExams && Array.isArray(mockExams)) {
+      mockExams.forEach((exam, index) => {
+        const examLabel = `Exam ${index + 1}`;
+        if (!examDataMap[examLabel] && exam && (exam.percentage > 0 || exam.examDegree > 0)) {
+          examDataMap[examLabel] = {
+            exam: examLabel,
+            percentage: exam.percentage || 0,
+            examDegree: exam.examDegree || 0,
+            outOf: exam.outOf || 0,
+            date: exam.date || null
+          };
+        }
+      });
+    }
+
+    // Convert to sorted array
+    return Object.values(examDataMap)
+      .sort((a, b) => {
+        const numA = parseInt(a.exam.replace('Exam ', ''), 10) || 0;
+        const numB = parseInt(b.exam.replace('Exam ', ''), 10) || 0;
+        return numA - numB;
+      });
+  }, [mockExams, onlineMockExams, mockExamChartData]);
 
   return (
     <div style={{ marginTop: 24 }}>

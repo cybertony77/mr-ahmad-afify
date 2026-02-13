@@ -48,7 +48,9 @@ export default function ScoreSelect({ selectedScore, onScoreChange, required = f
           justifyContent: 'space-between',
           alignItems: 'center',
           fontSize: '1rem',
-          color: selectedScore ? '#000000' : '#adb5bd',
+          color: selectedScore ? selectedScore ? '#1FA8DC' : '#000000' : '#adb5bd',
+          backgroundColor: selectedScore ? selectedScore ? '#f0f8ff' : '#ffffff' : '#ffffff',
+          fontWeight: selectedScore ? selectedScore ? '600' : '400' : '400',
           transition: 'all 0.3s ease',
           boxShadow: actualIsOpen ? '0 0 0 3px rgba(31, 168, 220, 0.1)' : 'none'
         }}
@@ -98,7 +100,9 @@ export default function ScoreSelect({ selectedScore, onScoreChange, required = f
                 cursor: 'pointer',
                 borderBottom: '1px solid #f8f9fa',
                 transition: 'background-color 0.2s ease',
-                color: '#000000'
+                color: selectedScore === score ? '#1FA8DC' : '#000000',
+                backgroundColor: selectedScore === score ? '#f0f8ff' : '#ffffff',
+                fontWeight: selectedScore === score ? '600' : '400'
               }}
               onClick={() => handleScoreSelect(score)}
               onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}

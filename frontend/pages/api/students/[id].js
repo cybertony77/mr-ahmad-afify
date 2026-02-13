@@ -89,7 +89,7 @@ export default async function handler(req, res) {
         name: student.name,
         gender: student.gender || null,
         grade: student.grade,
-        course: student.course || student.grade, // Support both course and grade
+        course: student.course !== undefined && student.course !== null && student.course !== '' ? student.course : null, // Return course if it exists and is not empty, otherwise null
         courseType: student.courseType || null,
         phone: student.phone,
         parents_phone: student.parentsPhone || student.parentsPhone1 || null,
@@ -111,11 +111,13 @@ export default async function handler(req, res) {
         lessons: student.lessons || {}, // Include the full lessons object
         payment: student.payment || null, // Include payment data
         online_homeworks: student.online_homeworks || [], // Include online_homeworks for degree lookup
-        online_quizzes: student.online_quizzes || [] // Include online_quizzes for degree lookup
+        online_quizzes: student.online_quizzes || [], // Include online_quizzes for degree lookup
+        online_mock_exams: student.online_mock_exams || [], // Include online_mock_exams for degree lookup
+        mockExams: student.mockExams || [] // Include mockExams array for charts
       });
     } else if (req.method === 'PUT') {
       // Edit student - handle partial updates properly
-      const { name, grade, phone, parents_phone, main_center, age, gender, school, main_comment, comment, account_state, score } = req.body;
+      const { name, grade, course, courseType, phone, parents_phone, main_center, age, gender, school, main_comment, comment, account_state, score } = req.body;
       
       // Build update object with only defined values (not null or undefined)
       const update = {};
@@ -125,6 +127,12 @@ export default async function handler(req, res) {
       }
       if (grade !== undefined && grade !== null) {
         update.grade = grade;
+      }
+      if (course !== undefined && course !== null) {
+        update.course = course;
+      }
+      if (courseType !== undefined && courseType !== null) {
+        update.courseType = courseType;
       }
       if (phone !== undefined && phone !== null) {
         update.phone = phone;

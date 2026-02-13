@@ -35,6 +35,7 @@ const envConfig = loadEnvConfig();
 const JWT_SECRET = envConfig.JWT_SECRET || process.env.JWT_SECRET || 'topphysics_secret';
 const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/topphysics';
 const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'mr-george-magdy';
+const SUBSCRIPTION_ENABLED = envConfig.SYSTEM_SUBSCRIPTION === 'true' || process.env.SYSTEM_SUBSCRIPTION === 'true';
 
 console.log('🔗 Using Mongo URI:', MONGO_URI);
 
@@ -87,61 +88,63 @@ export default async function handler(req, res) {
       }
     }
 
-    // Check subscription status
-    const subscription = await db.collection('subscription').findOne({});
-    if (subscription) {
-      const now = new Date();
-      const expirationDate = subscription.date_of_expiration ? new Date(subscription.date_of_expiration) : null;
-      
-      // Compare full datetime (year, month, day, hour, minute, second) before deactivating
-      if (expirationDate && subscription.active) {
-        // Compare all datetime components to ensure accurate expiration check
-        const nowTime = now.getTime();
-        const expTime = expirationDate.getTime();
+    // Check subscription status (only if subscription system is enabled)
+    if (SUBSCRIPTION_ENABLED) {
+      const subscription = await db.collection('subscription').findOne({});
+      if (subscription) {
+        const now = new Date();
+        const expirationDate = subscription.date_of_expiration ? new Date(subscription.date_of_expiration) : null;
         
-        // Only deactivate if current time has passed expiration time
-        if (nowTime >= expTime) {
-          console.log('⏰ Subscription expiration time reached, deactivating...');
-          await db.collection('subscription').updateOne(
-            {},
-            { 
-              $set: { 
-                active: false,
-                subscription_duration: null,
-                date_of_subscription: null,
-                date_of_expiration: null,
-                cost: null,
-                note: null
-              } 
-            }
-          );
-          subscription.active = false;
+        // Compare full datetime (year, month, day, hour, minute, second) before deactivating
+        if (expirationDate && subscription.active) {
+          // Compare all datetime components to ensure accurate expiration check
+          const nowTime = now.getTime();
+          const expTime = expirationDate.getTime();
+          
+          // Only deactivate if current time has passed expiration time
+          if (nowTime >= expTime) {
+            console.log('⏰ Subscription expiration time reached, deactivating...');
+            await db.collection('subscription').updateOne(
+              {},
+              { 
+                $set: { 
+                  active: false,
+                  subscription_duration: null,
+                  date_of_subscription: null,
+                  date_of_expiration: null,
+                  cost: null,
+                  note: null
+                } 
+              }
+            );
+            subscription.active = false;
+          }
         }
-      }
 
-      // If subscription is inactive, only allow developers and students
-      if (!subscription.active) {
-        if (assistant.role !== 'developer' && assistant.role !== 'student') {
-          return res.status(403).json({ 
-            error: 'subscription_inactive',
-            message: 'Access unavailable: Subscription expired. Please contact Tony Joseph (developer) to renew.' 
-          });
-        }
-      } else if (subscription.active && expirationDate) {
-        // If subscription is active, check if expiration date/time has passed
-        const nowTime = now.getTime();
-        const expTime = expirationDate.getTime();
-        
-        if (nowTime >= expTime) {
-          // Subscription expired, only allow developers and students
+        // If subscription is inactive, only allow developers and students
+        if (!subscription.active) {
           if (assistant.role !== 'developer' && assistant.role !== 'student') {
             return res.status(403).json({ 
-              error: 'subscription_expired',
+              error: 'subscription_inactive',
               message: 'Access unavailable: Subscription expired. Please contact Tony Joseph (developer) to renew.' 
             });
           }
+        } else if (subscription.active && expirationDate) {
+          // If subscription is active, check if expiration date/time has passed
+          const nowTime = now.getTime();
+          const expTime = expirationDate.getTime();
+          
+          if (nowTime >= expTime) {
+            // Subscription expired, only allow developers and students
+            if (assistant.role !== 'developer' && assistant.role !== 'student') {
+              return res.status(403).json({ 
+                error: 'subscription_expired',
+                message: 'Access unavailable: Subscription expired. Please contact Tony Joseph (developer) to renew.' 
+              });
+            }
+          }
+          // If expiration time > current time, allow login
         }
-        // If expiration time > current time, allow login
       }
     }
     

@@ -332,12 +332,15 @@ export default function StudentDashboard() {
   const isHomeworksVideosEnabled = systemConfig?.homeworks_videos === true || systemConfig?.homeworks_videos === 'true';
   const isHomeworksEnabled = systemConfig?.homeworks === true || systemConfig?.homeworks === 'true';
   const isQuizzesEnabled = systemConfig?.quizzes === true || systemConfig?.quizzes === 'true';
+  const isMockExamsEnabled = systemConfig?.mock_exams === true || systemConfig?.mock_exams === 'true';
+  const isZoomJoinMeetingEnabled = systemConfig?.zoom_join_meeting === true || systemConfig?.zoom_join_meeting === 'true';
+  const isPaymentSystemEnabled = systemConfig?.payment_system === true || systemConfig?.payment_system === 'true';
   
   // Get student ID from profile and fetch student data
   const studentId = profile?.id ? profile.id.toString() : null;
   const { data: studentData, isLoading: studentLoading } = useStudent(studentId, { 
     enabled: !!studentId,
-    refetchInterval: 60000, // Auto-refetch every 1 minute (60,000 ms)
+    refetchInterval: 10000, // Auto-refetch every 10 seconds for live sessions/score updates
     refetchIntervalInBackground: true, // Continue refetching even when tab is in background
   });
   
@@ -361,6 +364,7 @@ export default function StudentDashboard() {
   };
   
   const firstName = studentData?.name ? getFirstName(studentData.name) : (profile?.name ? getFirstName(profile.name) : 'Student');
+  const remainingSessions = studentData?.payment?.numberOfSessions || 0;
   const isLoading = profileLoading || studentLoading;
 
   // WhatsApp Groups state
@@ -370,6 +374,10 @@ export default function StudentDashboard() {
   const [whatsAppGroups, setWhatsAppGroups] = useState([]);
   const [whatsappGroupsLoading, setWhatsappGroupsLoading] = useState(false);
   const [hasAvailableGroups, setHasAvailableGroups] = useState(false);
+
+  // Zoom Meeting state
+  const [zoomMeeting, setZoomMeeting] = useState(null);
+  const [zoomMeetingLoading, setZoomMeetingLoading] = useState(false);
 
   // Check for available groups on mount and when student data changes
   // This is NOT related to SYSTEM_WHATSAPP_JOIN_GROUP - check regardless of that setting
@@ -392,6 +400,36 @@ export default function StudentDashboard() {
     
     checkAvailableGroups();
   }, [studentId]);
+
+  // Check for available zoom meeting on mount and when student data changes
+  useEffect(() => {
+    const checkZoomMeeting = async () => {
+      if (!studentId) {
+        setZoomMeeting(null);
+        return;
+      }
+      
+      try {
+        const response = await apiClient.get('/api/join-zoom-meeting/student');
+        setZoomMeeting(response.data.meeting || null);
+      } catch (error) {
+        console.error('Error checking zoom meeting:', error);
+        setZoomMeeting(null);
+      }
+    };
+    
+    checkZoomMeeting();
+    
+    // Re-check every 30 seconds to handle time-based visibility
+    const interval = setInterval(checkZoomMeeting, 30000);
+    return () => clearInterval(interval);
+  }, [studentId]);
+
+  const handleJoinZoomMeeting = () => {
+    if (zoomMeeting && zoomMeeting.link) {
+      window.open(zoomMeeting.link, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   const handleJoinWhatsAppGroup = async () => {
     if (!studentId) return;
@@ -633,6 +671,16 @@ export default function StudentDashboard() {
             max-width: 100%;
           }
           
+          .sessions-reminder {
+            width: 450px;
+            max-width: 100%;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+          }
+          .sessions-reminder:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12) !important;
+          }
+          
           .score-section {
             width: 450px;
             max-width: 100%;
@@ -680,9 +728,21 @@ export default function StudentDashboard() {
             background: linear-gradient(90deg, #128C7E 0%, #25D366 100%);
             box-shadow: 0 8px 25px rgba(37, 211, 102, 0.4);
           }
+          .dashboard-btn.zoom-btn {
+            background: linear-gradient(90deg, #2d8cff 0%, #1a6fdb 100%);
+            box-shadow: 0 4px 16px rgba(45, 140, 255, 0.3);
+          }
+          .dashboard-btn.zoom-btn:hover:not(:disabled) {
+            background: linear-gradient(90deg, #1a6fdb 0%, #2d8cff 100%);
+            box-shadow: 0 8px 25px rgba(45, 140, 255, 0.4);
+          }
           
           @media (max-width: 768px) {
             .welcome-message {
+              width: 100%;
+              max-width: 100%;
+            }
+            .sessions-reminder {
               width: 100%;
               max-width: 100%;
             }
@@ -716,6 +776,13 @@ export default function StudentDashboard() {
               width: 100%;
               max-width: 100%;
               padding: 16px;
+              margin-left: 0 !important;
+              margin-right: 0 !important;
+            }
+            .sessions-reminder {
+              width: 100%;
+              max-width: 100%;
+              padding: 12px 14px !important;
               margin-left: 0 !important;
               margin-right: 0 !important;
             }
@@ -821,6 +888,64 @@ export default function StudentDashboard() {
                   <Image src="/waving-hand.svg" alt="Waving Hand" width={24} height={24} />
                 </h2>
               </div>
+
+              {/* Sessions Remaining Reminder - only show when payment system is enabled and <= 3 */}
+              {isPaymentSystemEnabled && studentData && remainingSessions <= 3 && (
+                <div className="sessions-reminder" style={{
+                  background: "rgba(255, 255, 255, 0.95)",
+                  borderRadius: "12px",
+                  padding: "14px 18px",
+                  margin: "0 auto 20px auto",
+                  maxWidth: "450px",
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "14px",
+                  borderLeft: `4px solid ${remainingSessions === 0 ? '#dc3545' : remainingSessions <= 2 ? '#f59e0b' : '#10b981'}`,
+                  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
+                }}>
+                  <div style={{
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "10px",
+                    background: remainingSessions === 0 ? 'linear-gradient(135deg, #fef2f2, #fee2e2)' : remainingSessions <= 2 ? 'linear-gradient(135deg, #fffbeb, #fef3c7)' : 'linear-gradient(135deg, #ecfdf5, #d1fae5)',
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={remainingSessions === 0 ? '#dc3545' : remainingSessions <= 2 ? '#f59e0b' : '#10b981'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                      <line x1="16" y1="2" x2="16" y2="6"></line>
+                      <line x1="8" y1="2" x2="8" y2="6"></line>
+                      <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: "0.8rem",
+                      fontWeight: "600",
+                      color: remainingSessions === 0 ? '#dc3545' : remainingSessions <= 2 ? '#b45309' : '#047857',
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                      marginBottom: "2px",
+                    }}>
+                      {remainingSessions === 0 ? 'Action Required' : 'Sessions Remaining'}
+                    </div>
+                    <div style={{
+                      fontSize: "0.85rem",
+                      color: "#4b5563",
+                      lineHeight: "1.4",
+                    }}>
+                      {remainingSessions === 0 ? (
+                        <>You have <span style={{ fontWeight: "800", color: "#dc3545" }}>0</span> sessions remaining. Please renew now to continue.</>
+                      ) : (
+                        <>You have only <span style={{ fontWeight: "800", color: remainingSessions <= 2 ? '#b45309' : '#047857' }}>{remainingSessions}</span> session{remainingSessions !== 1 ? 's' : ''} remaining. Please renew to continue your sessions without interruption.</>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Score Section - Only show if scoring system is enabled */}
               {isScoringEnabled && (
@@ -1012,6 +1137,17 @@ export default function StudentDashboard() {
                 </button>
               )}
 
+              {isZoomJoinMeetingEnabled && zoomMeeting && (
+                <button
+                  className="dashboard-btn zoom-btn"
+                  onClick={handleJoinZoomMeeting}
+                  disabled={!studentId}
+                >
+                  <Image src="/zoom.svg" alt="Zoom" width={20} height={20} />
+                  Join Zoom Meeting
+                </button>
+              )}
+
               {isOnlineVideosEnabled && (
                 <button
                   className="dashboard-btn"
@@ -1049,6 +1185,17 @@ export default function StudentDashboard() {
                 >
                   <Image src="/notepad.svg" alt="Notepad" width={20} height={20} />
                   My Quizzes
+                </button>
+              )}
+
+              {isMockExamsEnabled && (
+                <button
+                  className="dashboard-btn"
+                  onClick={() => router.push("/student_dashboard/my_mock_exams")}
+                  style={{ background: "linear-gradient(90deg, #6f42c1 0%, #8e44ad 100%)" }}
+                >
+                  <Image src="/exam.svg" alt="Mock Exams" width={20} height={20} />
+                  My Mock Exams
                 </button>
               )}
 

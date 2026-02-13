@@ -131,7 +131,9 @@ export default function CenterSelect({ selectedCenter, onCenterChange, required 
                 cursor: 'pointer',
                 borderBottom: '1px solid #f8f9fa',
                 transition: 'background-color 0.2s ease',
-                color: '#000000'
+                color: selectedCenter === center ? '#1FA8DC' : '#000000',
+                backgroundColor: selectedCenter === center ? '#f0f8ff' : '#ffffff',
+                fontWeight: selectedCenter === center ? '600' : '400'
               }}
               onClick={() => handleCenterSelect(center)}
               onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}

@@ -15,6 +15,9 @@ export default function ScoringRulesAndRanking() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { data: systemConfig } = useSystemConfig();
   const isScoringEnabled = systemConfig?.scoring_system === true || systemConfig?.scoring_system === 'true';
+  const isHomeworksEnabled = systemConfig?.homeworks === true || systemConfig?.homeworks === 'true';
+  const isQuizzesEnabled = systemConfig?.quizzes === true || systemConfig?.quizzes === 'true';
+  const isMockExamsEnabled = systemConfig?.mock_exams === true || systemConfig?.mock_exams === 'true';
   
   // Get student ID from profile and fetch student data
   const studentId = profile?.id ? profile.id.toString() : null;
@@ -58,7 +61,13 @@ export default function ScoringRulesAndRanking() {
     enabled: isScoringEnabled,
   });
 
-  const conditions = conditionsData?.conditions || [];
+  const allConditions = conditionsData?.conditions || [];
+  const conditions = allConditions.filter((condition) => {
+    if (condition.type === 'homework' && !isHomeworksEnabled) return false;
+    if (condition.type === 'quiz' && !isQuizzesEnabled) return false;
+    if (condition.type === 'mock-exam' && !isMockExamsEnabled) return false;
+    return true;
+  });
 
   const getConditionLabel = (condition) => {
     if (condition.type === 'attendance') {
@@ -69,6 +78,8 @@ export default function ScoringRulesAndRanking() {
       return 'Homework (without degree)';
     } else if (condition.type === 'quiz') {
       return 'Quiz';
+    } else if (condition.type === 'mock-exam') {
+      return 'Mock Exam';
     }
     return condition.type;
   };
@@ -422,7 +433,7 @@ export default function ScoringRulesAndRanking() {
                             Status: <strong style={{ color: '#1FA8DC' }}>{rule.key}</strong> → <strong>{rule.points >= 0 ? '+' : ''}{rule.points}</strong> points
                           </span>
                         )}
-                        {(condition.type === 'homework' && condition.withDegree === true) || condition.type === 'quiz' ? (
+                        {(condition.type === 'homework' && condition.withDegree === true) || condition.type === 'quiz' || condition.type === 'mock-exam' ? (
                           <span>
                             Range: <strong style={{ color: '#1FA8DC' }}>{rule.min}% - {rule.max}%</strong> → <strong>{rule.points >= 0 ? '+' : ''}{rule.points}</strong> points
                           </span>
@@ -453,6 +464,10 @@ export default function ScoringRulesAndRanking() {
                             {bonus.condition.lastN} consecutive <strong>
                               {bonus.condition.hwDone === true ? 'Done' : bonus.condition.hwDone === false ? 'Not Done' : bonus.condition.hwDone === 'Not Completed' ? 'Not Completed' : String(bonus.condition.hwDone)}
                             </strong> → <strong>+{bonus.points} points</strong>
+                          </span>
+                        ) : condition.type === 'mock-exam' ? (
+                          <span>
+                            {bonus.condition.lastN} constant exams with degree <strong>{bonus.condition.percentage}%</strong> → <strong>+{bonus.points} points</strong>
                           </span>
                         ) : (
                           <span>

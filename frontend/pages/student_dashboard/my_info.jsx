@@ -89,6 +89,23 @@ export default function MyInfo() {
     refetchOnMount: true, // Always refetch when component mounts/page entered
   });
 
+  // Fetch mock exam performance chart data from API
+  const { data: mockExamPerformanceData } = useQuery({
+    queryKey: ['mock-exam-performance', studentId],
+    queryFn: async () => {
+      if (!studentId) return { chartData: [] };
+      try {
+        const response = await apiClient.get(`/api/students/${studentId}/mock-exam-performance`);
+        return response.data || { chartData: [] };
+      } catch (error) {
+        console.error('Error fetching mock exam performance:', error);
+        return { chartData: [] };
+      }
+    },
+    enabled: !!studentId,
+    staleTime: 30 * 1000,
+  });
+
   // Debug logging for React Query status
   useEffect(() => {
     if (student && studentId) {
@@ -768,9 +785,16 @@ export default function MyInfo() {
                 <div className="detail-value">{student.school || 'N/A'}</div>
               </div>
               {isScoringEnabled && (
-              <div className="detail-item">
-                <div className="detail-label">Score</div>
-                <div className="detail-value" style={{ fontWeight: '700', color: '#1FA8DC' }}>{student?.score !== null && student?.score !== undefined ? student.score : 0}</div>
+              <div className="detail-item" style={{ borderLeft: '4px solid #f59e0b' }}>
+                <div className="detail-label">SCORE</div>
+                <div className="detail-value" style={{ 
+                  fontSize: '1.4rem', 
+                  fontWeight: '800',
+                  color: (student?.score !== undefined && student?.score !== null && student?.score >= 0) ? '#059669' : '#dc2626'
+                }}>
+                  {student?.score !== null && student?.score !== undefined ? student.score : 0}
+                  <span style={{ fontSize: '0.8rem', fontWeight: '500', color: '#6c757d', marginLeft: '6px' }}>pts</span>
+                </div>
               </div>
               )}
               <div className="detail-item">
@@ -967,6 +991,8 @@ export default function MyInfo() {
             <ChartTabs 
               lessons={student.lessons || {}} 
               mockExams={student.mockExams || []} 
+              onlineMockExams={student.online_mock_exams || []}
+              mockExamChartData={mockExamPerformanceData?.chartData}
             />
             <NeedHelp style={{ padding: '16px', marginTop: '16px' }} />
           </div>

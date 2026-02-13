@@ -78,7 +78,9 @@ export default function GradeSelect({ selectedGrade, onGradeChange, required = f
                 cursor: 'pointer',
                 borderBottom: '1px solid #f8f9fa',
                 transition: 'background-color 0.2s ease',
-                color: '#000000'
+                color: selectedGrade === grade ? '#1FA8DC' : '#000000',
+                backgroundColor: selectedGrade === grade ? '#f0f8ff' : '#ffffff',
+                fontWeight: selectedGrade === grade ? '600' : '400'
               }}
               onClick={() => handleGradeSelect(grade)}
               onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}

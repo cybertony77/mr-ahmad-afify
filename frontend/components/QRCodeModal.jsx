@@ -110,7 +110,7 @@ export default function QRCodeModal({ isOpen, onClose }) {
   };
 
   const qrValue = studentData?.id 
-    ? `https://linktr.ee/mr_amgad_elalfy/?id=${studentData.id}`
+    ? `https://www.facebook.com/share/1AShaU7c3t/?id=${studentData.id}`
     : '';
 
   if (!isOpen) return null;

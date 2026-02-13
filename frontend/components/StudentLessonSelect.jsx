@@ -47,7 +47,9 @@ export default function StudentLessonSelect({
           justifyContent: 'space-between',
           alignItems: 'center',
           fontSize: '1rem',
-          color: selectedLesson && selectedLesson !== 'n/a' ? '#000000' : '#adb5bd',
+          color: selectedLesson && selectedLesson !== 'n/a' ? selectedLesson ? '#1FA8DC' : '#000000' : '#adb5bd',
+          backgroundColor: selectedLesson && selectedLesson !== 'n/a' ? selectedLesson ? '#f0f8ff' : '#ffffff' : '#ffffff',
+          fontWeight: selectedLesson && selectedLesson !== 'n/a' ? selectedLesson ? '600' : '400' : '400',
           transition: 'all 0.3s ease',
           boxShadow: isOpen ? '0 0 0 3px rgba(31, 168, 220, 0.1)' : 'none'
         }}
@@ -114,7 +116,9 @@ export default function StudentLessonSelect({
                   cursor: 'pointer',
                   borderBottom: '1px solid #f8f9fa',
                   transition: 'background-color 0.2s ease',
-                  color: '#000000'
+                  color: selectedLesson === lesson ? '#1FA8DC' : '#000000',
+                  backgroundColor: selectedLesson === lesson ? '#f0f8ff' : '#ffffff',
+                  fontWeight: selectedLesson === lesson ? '600' : '400'
                 }}
                 onClick={() => handleLessonSelect(lesson)}
                 onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}

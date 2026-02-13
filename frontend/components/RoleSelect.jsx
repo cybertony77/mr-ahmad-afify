@@ -27,7 +27,9 @@ export default function RoleSelect({ selectedRole, onRoleChange, required = fals
           justifyContent: 'space-between',
           alignItems: 'center',
           fontSize: '1rem',
-          color: selectedRole ? '#000000' : '#adb5bd',
+          color: selectedRole ? selectedRole ? '#1FA8DC' : '#000000' : '#adb5bd',
+          backgroundColor: selectedRole ? selectedRole ? '#f0f8ff' : '#ffffff' : '#ffffff',
+          fontWeight: selectedRole ? selectedRole ? '600' : '400' : '400',
           transition: 'all 0.3s ease',
           boxShadow: actualIsOpen ? '0 0 0 3px rgba(31, 168, 220, 0.1)' : 'none'
         }}
@@ -78,7 +80,9 @@ export default function RoleSelect({ selectedRole, onRoleChange, required = fals
                 cursor: 'pointer',
                 borderBottom: '1px solid #f8f9fa',
                 transition: 'background-color 0.2s ease',
-                color: '#000000'
+                color: selectedRole === role ? '#1FA8DC' : '#000000',
+                backgroundColor: selectedRole === role ? '#f0f8ff' : '#ffffff',
+                fontWeight: selectedRole === role ? '600' : '400'
               }}
               onClick={() => handleRoleSelect(role)}
               onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}

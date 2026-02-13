@@ -154,6 +154,7 @@ export default function StudentInfo() {
   const { data: systemConfig } = useSystemConfig();
   const systemName = systemConfig?.name || '';
   const isScoringEnabled = systemConfig?.scoring_system === true || systemConfig?.scoring_system === 'true';
+  const isPaymentSystemEnabled = systemConfig?.payment_system === true || systemConfig?.payment_system === 'true';
 
   // Get all students for name-based search (only if authenticated)
   const { data: allStudents } = useStudents({}, { 
@@ -194,6 +195,25 @@ export default function StudentInfo() {
   const currentStudent = hasAuthToken ? student : publicStudent;
   const currentStudentLoading = hasAuthToken ? studentLoading : publicStudentLoading;
   const currentStudentError = hasAuthToken ? studentError : publicStudentError;
+
+  // Fetch mock exam performance chart data from API (same logic as mock-exam-performance.js)
+  const mockExamStudentId = hasAuthToken ? searchId : studentId;
+  const { data: mockExamPerformanceData } = useQuery({
+    queryKey: ['mock-exam-performance', mockExamStudentId],
+    queryFn: async () => {
+      if (!mockExamStudentId) return { chartData: [] };
+      try {
+        const sigParam = !hasAuthToken && router.query.sig ? `?sig=${encodeURIComponent(router.query.sig)}` : '';
+        const response = await apiClient.get(`/api/students/${mockExamStudentId}/mock-exam-performance${sigParam}`);
+        return response.data || { chartData: [] };
+      } catch (error) {
+        console.error('Error fetching mock exam performance:', error);
+        return { chartData: [] };
+      }
+    },
+    enabled: !!(mockExamStudentId && (hasAuthToken || isValidSignature)),
+    staleTime: 30 * 1000,
+  });
 
   // Get student profile picture - use searchId if authenticated, studentId if public
   const profilePictureStudentId = hasAuthToken ? searchId : studentId;
@@ -996,7 +1016,7 @@ export default function StudentInfo() {
                 <div className="detail-label">Course Type</div>
                 <div className="detail-value">{currentStudent.courseType || 'N/A'}</div>
               </div>
-              {hasAuthToken && currentStudent?.payment?.numberOfSessions !== undefined && (
+              {isPaymentSystemEnabled && hasAuthToken && currentStudent?.payment?.numberOfSessions !== undefined && (
                 <div className="detail-item">
                   <div className="detail-label">Available Number of Sessions</div>
                   <div className="detail-value" style={{ 
@@ -1057,9 +1077,16 @@ export default function StudentInfo() {
                 <div className="detail-value">{currentStudent.school || 'N/A'}</div>
                 </div>
               {isScoringEnabled && (
-              <div className="detail-item">
-                <div className="detail-label">Score</div>
-                <div className="detail-value" style={{ fontWeight: '700', color: '#1FA8DC' }}>{currentStudent?.score !== null && currentStudent?.score !== undefined ? currentStudent.score : 0}</div>
+              <div className="detail-item" style={{ borderLeft: '4px solid #f59e0b' }}>
+                <div className="detail-label">SCORE</div>
+                <div className="detail-value" style={{ 
+                  fontSize: '1.4rem', 
+                  fontWeight: '800',
+                  color: (currentStudent?.score !== undefined && currentStudent?.score !== null && currentStudent?.score >= 0) ? '#059669' : '#dc2626'
+                }}>
+                  {currentStudent?.score !== null && currentStudent?.score !== undefined ? currentStudent.score : 0}
+                  <span style={{ fontSize: '0.8rem', fontWeight: '500', color: '#6c757d', marginLeft: '6px' }}>pts</span>
+                </div>
               </div>
               )}
               {currentStudent?.address && (
@@ -1294,7 +1321,7 @@ export default function StudentInfo() {
         {/* Charts Tabs Section - Outside lessons container */}
         {currentStudent?.lessons && (
           <div style={{ marginTop: 24 }}>
-            <ChartTabs lessons={currentStudent.lessons} mockExams={currentStudent.mockExams} />
+            <ChartTabs lessons={currentStudent.lessons} mockExams={currentStudent.mockExams} onlineMockExams={currentStudent.online_mock_exams} mockExamChartData={mockExamPerformanceData?.chartData} />
           </div>
         )}
         

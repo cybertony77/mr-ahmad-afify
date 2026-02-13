@@ -92,7 +92,9 @@ export default function GenderSelect({ selectedGender, onGenderChange, required 
                 cursor: 'pointer',
                 borderBottom: '1px solid #f8f9fa',
                 transition: 'background-color 0.2s ease',
-                color: '#000000'
+                color: selectedGender === gender ? '#1FA8DC' : '#000000',
+                backgroundColor: selectedGender === gender ? '#f0f8ff' : '#ffffff',
+                fontWeight: selectedGender === gender ? '600' : '400'
               }}
               onClick={() => handleGenderSelect(gender)}
               onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}

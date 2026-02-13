@@ -114,7 +114,7 @@ export default async function handler(req, res) {
       }
 
       // Handle both old format (video_urls) and new format (videos array)
-      // Only YouTube is supported now
+      // Supports YouTube and Cloudflare R2 video types
       let videoData = {};
       
       if (videos && Array.isArray(videos) && videos.length > 0) {
@@ -125,17 +125,21 @@ export default async function handler(req, res) {
             if (video.video_type === 'youtube') {
               videoData[`video_ID_${index + 1}`] = video.video_id;
               videoData[`video_type_${index + 1}`] = 'youtube';
-              // Add video_name if provided
+              if (video.video_name && video.video_name.trim()) {
+                videoData[`video_name_${index + 1}`] = video.video_name.trim();
+              }
+            } else if (video.video_type === 'r2') {
+              videoData[`video_ID_${index + 1}`] = video.video_id;
+              videoData[`video_type_${index + 1}`] = 'r2';
               if (video.video_name && video.video_name.trim()) {
                 videoData[`video_name_${index + 1}`] = video.video_name.trim();
               }
             } else {
-              return res.status(400).json({ error: `Invalid video type at position ${index + 1}. Only YouTube is supported.` });
+              return res.status(400).json({ error: `Invalid video type at position ${index + 1}. Supported types: youtube, r2.` });
             }
           } else if (video && video.video_id) {
             // If no video_type specified, assume YouTube and extract ID from URL if needed
             let videoId = video.video_id;
-            // Check if it's a URL and extract ID
             if (videoId.includes('youtube.com') || videoId.includes('youtu.be')) {
               videoId = extractYouTubeId(videoId);
               if (!videoId) {
@@ -144,7 +148,6 @@ export default async function handler(req, res) {
             }
             videoData[`video_ID_${index + 1}`] = videoId;
             videoData[`video_type_${index + 1}`] = 'youtube';
-            // Add video_name if provided
             if (video.video_name && video.video_name.trim()) {
               videoData[`video_name_${index + 1}`] = video.video_name.trim();
             }
@@ -222,7 +225,7 @@ export default async function handler(req, res) {
       }
 
       // Handle both old format (video_urls) and new format (videos array)
-      // Only YouTube is supported now
+      // Supports YouTube and Cloudflare R2 video types
       let videoData = {};
       
       if (videos && Array.isArray(videos) && videos.length > 0) {
@@ -233,17 +236,21 @@ export default async function handler(req, res) {
             if (video.video_type === 'youtube') {
               videoData[`video_ID_${index + 1}`] = video.video_id;
               videoData[`video_type_${index + 1}`] = 'youtube';
-              // Add video_name if provided
+              if (video.video_name && video.video_name.trim()) {
+                videoData[`video_name_${index + 1}`] = video.video_name.trim();
+              }
+            } else if (video.video_type === 'r2') {
+              videoData[`video_ID_${index + 1}`] = video.video_id;
+              videoData[`video_type_${index + 1}`] = 'r2';
               if (video.video_name && video.video_name.trim()) {
                 videoData[`video_name_${index + 1}`] = video.video_name.trim();
               }
             } else {
-              return res.status(400).json({ error: `Invalid video type at position ${index + 1}. Only YouTube is supported.` });
+              return res.status(400).json({ error: `Invalid video type at position ${index + 1}. Supported types: youtube, r2.` });
             }
           } else if (video && video.video_id) {
             // If no video_type specified, assume YouTube and extract ID from URL if needed
             let videoId = video.video_id;
-            // Check if it's a URL and extract ID
             if (videoId.includes('youtube.com') || videoId.includes('youtu.be')) {
               videoId = extractYouTubeId(videoId);
               if (!videoId) {
@@ -252,7 +259,6 @@ export default async function handler(req, res) {
             }
             videoData[`video_ID_${index + 1}`] = videoId;
             videoData[`video_type_${index + 1}`] = 'youtube';
-            // Add video_name if provided
             if (video.video_name && video.video_name.trim()) {
               videoData[`video_name_${index + 1}`] = video.video_name.trim();
             }

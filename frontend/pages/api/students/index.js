@@ -473,7 +473,7 @@ export default async function handler(req, res) {
       }
     } else if (req.method === 'POST') {
       // Add new student
-      const { id, name, grade, course, courseType, phone, parents_phone, main_center, age, gender, school, main_comment, comment, account_state, score, payment, online_sessions, online_homeworks, online_quizzes } = req.body;
+      const { id, name, grade, course, courseType, phone, parents_phone, main_center, age, gender, school, main_comment, comment, account_state, score, payment, online_sessions, online_homeworks, online_quizzes, online_mock_exams, mockExams } = req.body;
       
       let newId;
       
@@ -532,6 +532,15 @@ export default async function handler(req, res) {
       const onlineSessions = online_sessions || [];
       const onlineHomeworks = online_homeworks || [];
       const onlineQuizzes = online_quizzes || [];
+      const onlineMockExams = online_mock_exams || [];
+      
+      // Initialize mockExams array (50 exams, all null by default)
+      const mockExamsArray = mockExams || Array(50).fill(null).map(() => ({
+        examDegree: null,
+        outOf: null,
+        percentage: null,
+        date: null
+      }));
       
       const student = {
         id: newId,
@@ -551,7 +560,9 @@ export default async function handler(req, res) {
         payment: paymentObj,
         online_sessions: onlineSessions,
         online_homeworks: onlineHomeworks,
-        online_quizzes: onlineQuizzes
+        online_quizzes: onlineQuizzes,
+        online_mock_exams: onlineMockExams,
+        mockExams: mockExamsArray
       };
       
       // Only add age if it's not empty string

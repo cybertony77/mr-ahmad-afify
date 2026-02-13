@@ -72,8 +72,8 @@ function convertConditionToZenRule(condition) {
         hwDone: rule.hwDone
       }
     }));
-  } else if (type === 'quiz') {
-    // Quiz rules: match by percentage range
+  } else if (type === 'quiz' || type === 'mock-exam') {
+    // Quiz/Mock-exam rules: match by percentage range
     decisions = rules.map(rule => ({
       key: `range_${rule.min}_${rule.max}`,
       result: {
@@ -279,6 +279,25 @@ function calculateBonusPoints(condition, student, type, currentLesson = null) {
           }
         });
       }
+    } else if (type === 'mock_exam') {
+      const onlineMockExams = (student.online_mock_exams && Array.isArray(student.online_mock_exams)) ? student.online_mock_exams : [];
+    
+      // Get percentages from online_mock_exams
+      if (Array.isArray(onlineMockExams)) {
+        onlineMockExams.forEach(ome => {
+          try {
+            if (ome && ome.lesson && ome.percentage) {
+              const percentageStr = String(ome.percentage).replace('%', '').trim();
+              const percentage = parseInt(percentageStr, 10);
+              if (!isNaN(percentage)) {
+                lessonPercentageMap.set(ome.lesson, percentage);
+              }
+            }
+          } catch (err) {
+            console.error('[SCORING] Error processing online mock exam for bonus:', err);
+          }
+        });
+      }
     }
   } catch (err) {
     console.error('[SCORING] Error in calculateBonusPoints while processing lessons:', err);
@@ -458,17 +477,19 @@ export default async function handler(req, res) {
     let bonusPoints = 0;
 
     // Find relevant condition for the type
+    // mock_exam API type maps to 'mock-exam' database type
     let condition;
-    if (type === 'homework') {
+    const lookupType = type === 'mock_exam' ? 'mock-exam' : type;
+    if (lookupType === 'homework') {
       // Check if data has percentage (withDegree) or hwDone (without degree)
       const hasPercentage = data?.percentage !== undefined && data?.percentage !== null;
       if (hasPercentage) {
-        condition = conditions.find(c => c.type === type && c.withDegree === true);
+        condition = conditions.find(c => c.type === lookupType && c.withDegree === true);
       } else {
-        condition = conditions.find(c => c.type === type && c.withDegree === false);
+        condition = conditions.find(c => c.type === lookupType && c.withDegree === false);
       }
     } else {
-      condition = conditions.find(c => c.type === type);
+      condition = conditions.find(c => c.type === lookupType);
     }
     
     if (!condition) {
@@ -690,8 +711,10 @@ export default async function handler(req, res) {
           }
         }
       }
-    } else if (type === 'quiz') {
+    } else if (type === 'quiz' || type === 'mock_exam') {
       const { percentage, previousPercentage, reverseOnly } = data;
+      const historyType = type; // Use actual type for history lookup ('quiz' or 'mock_exam')
+      const typeLabel = type === 'mock_exam' ? 'Mock Exam' : 'Quiz';
       
       if (reverseOnly && previousPercentage !== undefined && previousPercentage !== null) {
         // Reverse previous points only
@@ -709,12 +732,12 @@ export default async function handler(req, res) {
                 .findOne(
                   { 
                     student_id: parseInt(studentId), 
-                    type: 'quiz',
+                    type: historyType,
                     process_lesson: lesson
                   },
                   { sort: { timestamp: -1 } }
                 );
-              console.log(`[SCORING] Quiz history lookup with lesson ${lesson}:`, lastHistory ? 'found' : 'not found');
+              console.log(`[SCORING] ${typeLabel} history lookup with lesson ${lesson}:`, lastHistory ? 'found' : 'not found');
             }
             
             // If not found with lesson, try without lesson filter
@@ -723,16 +746,16 @@ export default async function handler(req, res) {
                 .findOne(
                   { 
                     student_id: parseInt(studentId), 
-                    type: 'quiz'
+                    type: historyType
                   },
                   { sort: { timestamp: -1 } }
                 );
-              console.log(`[SCORING] Quiz history lookup without lesson:`, lastHistory ? 'found' : 'not found');
+              console.log(`[SCORING] ${typeLabel} history lookup without lesson:`, lastHistory ? 'found' : 'not found');
             }
             
             if (lastHistory) {
               // Use the actual base_points from history (this is the net change that was applied)
-              // Always use base_points if it's not 0, even if negative (for 0% quiz which gives -25)
+              // Always use base_points if it's not 0, even if negative (for 0% which gives -25)
               if (lastHistory.base_points !== 0) {
                 previousPoints = lastHistory.base_points;
               } else if (lastHistory.score_added !== 0) {
@@ -740,33 +763,32 @@ export default async function handler(req, res) {
               } else {
                 // Fallback to rule evaluation if history has 0 points
                 previousPoints = await evaluateRule(zenRule, { percentage: previousPercentage });
-                console.log(`[SCORING] Quiz history had 0 points, using rule evaluation: ${previousPoints}`);
+                console.log(`[SCORING] ${typeLabel} history had 0 points, using rule evaluation: ${previousPoints}`);
               }
               
               // Reverse bonus points if they were applied
               if (lastHistory.bonus_points && lastHistory.bonus_points !== 0) {
                 bonusPoints = -lastHistory.bonus_points;
                 data.bonusLessons = lastHistory.bonus_lessons || [];
-                console.log(`[SCORING] Reversing quiz bonus points: ${bonusPoints} for lessons ${data.bonusLessons.join(', ')}`);
+                console.log(`[SCORING] Reversing ${typeLabel} bonus points: ${bonusPoints} for lessons ${data.bonusLessons.join(', ')}`);
               }
               
-              console.log(`[SCORING] Using history for quiz reverse: base_points=${lastHistory.base_points}, score_added=${lastHistory.score_added}, bonus_points=${lastHistory.bonus_points}, data=${JSON.stringify(lastHistory.data)}, using=${previousPoints}`);
+              console.log(`[SCORING] Using history for ${typeLabel} reverse: base_points=${lastHistory.base_points}, score_added=${lastHistory.score_added}, bonus_points=${lastHistory.bonus_points}, data=${JSON.stringify(lastHistory.data)}, using=${previousPoints}`);
             } else {
               // No history found, use rule evaluation
-              // For 0% (Didn't Attend The Quiz), this should return -25 points
               previousPoints = await evaluateRule(zenRule, { percentage: previousPercentage });
-              console.log(`[SCORING] No quiz history found for student ${studentId}, type quiz, lesson ${lesson || 'N/A'}, using rule evaluation for ${previousPercentage}%: ${previousPoints}`);
+              console.log(`[SCORING] No ${typeLabel} history found for student ${studentId}, type ${historyType}, lesson ${lesson || 'N/A'}, using rule evaluation for ${previousPercentage}%: ${previousPoints}`);
             }
           } catch (historyErr) {
-            console.error('Error getting history for quiz reverse, using rule evaluation:', historyErr);
+            console.error(`Error getting history for ${typeLabel} reverse, using rule evaluation:`, historyErr);
             previousPoints = await evaluateRule(zenRule, { percentage: previousPercentage });
-            console.log(`[SCORING] Error in quiz history lookup, using rule evaluation: ${previousPoints}`);
+            console.log(`[SCORING] Error in ${typeLabel} history lookup, using rule evaluation: ${previousPoints}`);
           }
         
         // Reverse the points (negative of what was applied)
         pointsToAdd = -previousPoints;
         const pointsSign = pointsToAdd >= 0 ? '+' : '';
-        console.log(`[SCORING] Quiz (reverse only): ${previousPercentage}% → ${pointsSign}${pointsToAdd} points (reversing ${previousPoints} points)`);
+        console.log(`[SCORING] ${typeLabel} (reverse only): ${previousPercentage}% → ${pointsSign}${pointsToAdd} points (reversing ${previousPoints} points)`);
       } else if (percentage !== undefined && percentage !== null) {
         // Calculate new points and reverse previous
         // Special case: If going from any percentage to 0% (Didn't Attend The Quiz), only reverse previous points
@@ -776,24 +798,23 @@ export default async function handler(req, res) {
           const previousPoints = await evaluateRule(zenRule, { percentage: previousPercentage });
           pointsToAdd = -previousPoints;
           const pointsSign = pointsToAdd >= 0 ? '+' : '';
-          console.log(`[SCORING] Quiz (${previousPercentage}%→0%): Only reversing ${previousPoints} points → ${pointsSign}${pointsToAdd} points`);
+          console.log(`[SCORING] ${typeLabel} (${previousPercentage}%→0%): Only reversing ${previousPoints} points → ${pointsSign}${pointsToAdd} points`);
         } else {
           const newPoints = await evaluateRule(zenRule, { percentage });
           let previousPoints = 0;
           if (previousPercentage !== undefined && previousPercentage !== null) {
             previousPoints = await evaluateRule(zenRule, { percentage: previousPercentage });
           }
-          // Special case: If previous was 0% (Didn't Attend The Quiz) and new is positive, 
+          // Special case: If previous was 0% and new is positive, 
           // only apply the new points, don't reverse the negative 0% points
-          // This is because 0% penalty is only for students who never took the quiz
           if (previousPercentage === 0 && percentage > 0) {
             pointsToAdd = newPoints; // Only apply new points, don't reverse 0% penalty
             const pointsSign = pointsToAdd >= 0 ? '+' : '';
-            console.log(`[SCORING] Quiz (0%→${percentage}%): Only applying ${newPoints} points (not reversing 0% penalty) → ${pointsSign}${pointsToAdd} points`);
+            console.log(`[SCORING] ${typeLabel} (0%→${percentage}%): Only applying ${newPoints} points (not reversing 0% penalty) → ${pointsSign}${pointsToAdd} points`);
           } else {
             pointsToAdd = newPoints - previousPoints;
             const pointsSign = pointsToAdd >= 0 ? '+' : '';
-            console.log(`[SCORING] Quiz: ${percentage}% → ${pointsSign}${pointsToAdd} points (new: ${newPoints}, previous: ${previousPoints})`);
+            console.log(`[SCORING] ${typeLabel}: ${percentage}% → ${pointsSign}${pointsToAdd} points (new: ${newPoints}, previous: ${previousPoints})`);
           }
           
           // Calculate bonus points
@@ -835,13 +856,15 @@ export default async function handler(req, res) {
       }
     } else if (type === 'quiz') {
       processName = `Quiz: ${data.percentage || 0}%`;
+    } else if (type === 'mock_exam') {
+      processName = `Mock Exam: ${data.percentage || 0}%`;
     }
     
     // Save to scoring_system_history collection (always save, even if points are 0)
     // Calculate base_points (points for current state only, not net change)
     let basePointsForHistory = pointsToAdd;
-    if (type === 'quiz' && data.percentage !== undefined && data.percentage !== null && !data.reverseOnly) {
-      // For quiz, base_points should be the points for the current percentage only
+    if ((type === 'quiz' || type === 'mock_exam') && data.percentage !== undefined && data.percentage !== null && !data.reverseOnly) {
+      // For quiz/mock_exam, base_points should be the points for the current percentage only
       const currentStatePoints = await evaluateRule(zenRule, { percentage: data.percentage });
       basePointsForHistory = currentStatePoints;
     } else if (type === 'homework' && data.hwDone !== undefined && !data.reverseOnly) {
@@ -1012,7 +1035,7 @@ export default async function handler(req, res) {
 
     // Calculate actual base points for current state (for display in quiz/homework result)
     let actualBasePoints = basePointsForHistory;
-    if (type === 'quiz' && data.percentage !== undefined && data.percentage !== null && !data.reverseOnly) {
+    if ((type === 'quiz' || type === 'mock_exam') && data.percentage !== undefined && data.percentage !== null && !data.reverseOnly) {
       actualBasePoints = await evaluateRule(zenRule, { percentage: data.percentage });
     } else if (type === 'homework' && condition.withDegree === true && data.percentage !== undefined && data.percentage !== null && !data.reverseOnly) {
       actualBasePoints = await evaluateRule(zenRule, { percentage: data.percentage });

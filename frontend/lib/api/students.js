@@ -146,6 +146,12 @@ const studentsApi = {
     });
     return response.data;
   },
+
+  // Save mock exam
+  saveMockExam: async (mockExamData) => {
+    const response = await apiClient.post('/api/mock-exams', mockExamData);
+    return response.data;
+  },
 };
 
 // React Query hooks
@@ -430,6 +436,27 @@ export const useSavePayment = () => {
       await queryClient.invalidateQueries({
         predicate: (query) => query.queryKey[0] === 'students'
       });
+    },
+  });
+};
+
+export const useSaveMockExam = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (mockExamData) => studentsApi.saveMockExam(mockExamData),
+    onSettled: async (_, __, mockExamData) => {
+      const studentId = mockExamData?.studentId;
+      if (studentId) {
+        // Invalidate the specific student's data
+        queryClient.invalidateQueries({ queryKey: studentKeys.detail(studentId) });
+        // Invalidate all students list to update any cached data
+        queryClient.invalidateQueries({ queryKey: studentKeys.lists() });
+        // Invalidate all student-related queries
+        await queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] === 'students'
+        });
+      }
     },
   });
 };

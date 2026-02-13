@@ -5,6 +5,7 @@ import AttendanceLessonSelect from '../../../../components/AttendancelessonSelec
 import CourseSelect from '../../../../components/CourseSelect';
 import CourseTypeSelect from '../../../../components/CourseTypeSelect';
 import OnlineSessionPaymentStateSelect from '../../../../components/OnlineSessionPaymentStateSelect';
+import VideoInput from '../../../../components/VideoInput';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
 import Image from 'next/image';
@@ -39,7 +40,12 @@ export default function EditHomeworkVideo() {
     description: '',
     videos: [{
       video_name: '',
-      youtube_url: ''
+      youtube_url: '',
+      video_source: 'youtube',
+      r2_key: '',
+      upload_file_name: '',
+      upload_progress: 0,
+      upload_status: 'idle',
     }]
   });
   const [selectedCourse, setSelectedCourse] = useState('');
@@ -52,6 +58,17 @@ export default function EditHomeworkVideo() {
   const [errors, setErrors] = useState({});
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const errorTimeoutRef = useRef(null);
+
+  // Fetch system config to check if R2 is enabled
+  const { data: systemConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: async () => {
+      const response = await apiClient.get('/api/system/config');
+      return response.data;
+    },
+  });
+
+  const showUploadTab = systemConfig?.cloudflare_r2 === true;
 
   // Fetch session data
   const { data: sessionsData } = useQuery({
@@ -75,10 +92,25 @@ export default function EditHomeworkVideo() {
         const videoId = selectedSession[`video_ID_${videoIndex}`];
         const videoType = selectedSession[`video_type_${videoIndex}`] || 'youtube';
         
-        if (videoType === 'youtube') {
+        if (videoType === 'r2') {
           videos.push({
             video_name: selectedSession[`video_name_${videoIndex}`] || '',
-            youtube_url: `https://www.youtube.com/watch?v=${videoId}`
+            youtube_url: '',
+            video_source: 'r2',
+            r2_key: videoId,
+            upload_file_name: selectedSession[`video_name_${videoIndex}`] || 'Uploaded video',
+            upload_progress: 100,
+            upload_status: 'done',
+          });
+        } else {
+          videos.push({
+            video_name: selectedSession[`video_name_${videoIndex}`] || '',
+            youtube_url: `https://www.youtube.com/watch?v=${videoId}`,
+            video_source: 'youtube',
+            r2_key: '',
+            upload_file_name: '',
+            upload_progress: 0,
+            upload_status: 'idle',
           });
         }
         videoIndex++;
@@ -89,7 +121,12 @@ export default function EditHomeworkVideo() {
         description: selectedSession.description || '',
         videos: videos.length > 0 ? videos : [{
           video_name: '',
-          youtube_url: ''
+          youtube_url: '',
+          video_source: 'youtube',
+          r2_key: '',
+          upload_file_name: '',
+          upload_progress: 0,
+          upload_status: 'idle',
         }]
       });
       setSelectedCourse(selectedSession.course || '');
@@ -135,43 +172,60 @@ export default function EditHomeworkVideo() {
 
   // Add video row
   const addVideo = () => {
-    setFormData({
-      ...formData,
-      videos: [...formData.videos, {
+    setFormData(prev => ({
+      ...prev,
+      videos: [...prev.videos, {
         video_name: '',
-        youtube_url: ''
+        youtube_url: '',
+        video_source: 'youtube',
+        r2_key: '',
+        upload_file_name: '',
+        upload_progress: 0,
+        upload_status: 'idle',
       }]
-    });
+    }));
   };
 
   // Remove video row
   const removeVideo = (index) => {
-    if (formData.videos.length > 1) {
-      const newVideos = formData.videos.filter((_, i) => i !== index);
-      setFormData({ ...formData, videos: newVideos });
-      const newErrors = { ...errors };
-      Object.keys(newErrors).forEach(key => {
-        if (key.startsWith(`video_${index}_`)) {
-          delete newErrors[key];
-        }
-      });
-      setErrors(newErrors);
-    }
+    setFormData(prev => {
+      if (prev.videos.length <= 1) return prev;
+      const newVideos = prev.videos.filter((_, i) => i !== index);
+      return { ...prev, videos: newVideos };
+    });
+    const newErrors = { ...errors };
+    Object.keys(newErrors).forEach(key => {
+      if (key.startsWith(`video_${index}_`)) {
+        delete newErrors[key];
+      }
+    });
+    setErrors(newErrors);
   };
-
 
   // Handle video name change
   const handleVideoNameChange = (index, name) => {
-    const newVideos = [...formData.videos];
-    newVideos[index].video_name = name;
-    setFormData({ ...formData, videos: newVideos });
+    setFormData(prev => {
+      const newVideos = [...prev.videos];
+      newVideos[index] = { ...newVideos[index], video_name: name };
+      return { ...prev, videos: newVideos };
+    });
   };
 
   // Handle YouTube URL change
   const handleYouTubeUrlChange = (index, url) => {
-    const newVideos = [...formData.videos];
-    newVideos[index].youtube_url = url;
-    setFormData({ ...formData, videos: newVideos });
+    setFormData(prev => {
+      const newVideos = [...prev.videos];
+      newVideos[index] = {
+        ...newVideos[index],
+        youtube_url: url,
+        video_source: 'youtube',
+        r2_key: '',
+        upload_file_name: '',
+        upload_progress: 0,
+        upload_status: 'idle',
+      };
+      return { ...prev, videos: newVideos };
+    });
     if (errors[`video_${index}_youtube_url`]) {
       const newErrors = { ...errors };
       delete newErrors[`video_${index}_youtube_url`];
@@ -179,10 +233,37 @@ export default function EditHomeworkVideo() {
     }
   };
 
+  // Handle R2 upload complete
+  const handleR2Upload = (index, r2Key, fileName) => {
+    setFormData(prev => {
+      const newVideos = [...prev.videos];
+      newVideos[index] = {
+        ...newVideos[index],
+        r2_key: r2Key,
+        upload_file_name: fileName,
+        video_source: r2Key ? 'r2' : 'youtube',
+        ...(r2Key ? {
+          youtube_url: '',
+          upload_status: 'done',
+          upload_progress: 100,
+        } : {
+          upload_status: 'idle',
+          upload_progress: 0,
+        }),
+      };
+      return { ...prev, videos: newVideos };
+    });
+    if (errors[`video_${index}_upload`]) {
+      const newErrors = { ...errors };
+      delete newErrors[`video_${index}_upload`];
+      setErrors(newErrors);
+    }
+  };
+
   // Handle form input change
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) {
       setErrors({ ...errors, [name]: '' });
     }
@@ -212,8 +293,9 @@ export default function EditHomeworkVideo() {
       newErrors.name = '❌ Name is required';
     }
 
+    // Validate videos - at least one must have either youtube_url or r2_key
     const validVideos = formData.videos.filter(video => {
-      return video.youtube_url && video.youtube_url.trim();
+      return (video.youtube_url && video.youtube_url.trim()) || (video.r2_key && video.r2_key.trim());
     });
 
     if (validVideos.length === 0) {
@@ -223,12 +305,15 @@ export default function EditHomeworkVideo() {
     // Validate each video
     for (let index = 0; index < formData.videos.length; index++) {
       const video = formData.videos[index];
-      if (video.youtube_url && video.youtube_url.trim()) {
+      const hasYoutube = video.youtube_url && video.youtube_url.trim();
+      const hasR2 = video.r2_key && video.r2_key.trim();
+
+      if (hasYoutube) {
         const videoId = extractYouTubeId(video.youtube_url.trim());
         if (!videoId) {
           newErrors[`video_${index}_youtube_url`] = '❌ Invalid YouTube URL';
         }
-      } else if (validVideos.length === 0 || formData.videos.some((v, i) => i !== index && v.youtube_url && v.youtube_url.trim())) {
+      } else if (!hasR2 && validVideos.length === 0) {
         newErrors[`video_${index}_youtube_url`] = '❌ YouTube URL is required';
       }
     }
@@ -255,29 +340,28 @@ export default function EditHomeworkVideo() {
     }
 
     // Prepare video data for API
-    const videoData = [];
+    const finalVideoData = [];
 
     for (let i = 0; i < formData.videos.length; i++) {
       const video = formData.videos[i];
       
-      if (video.youtube_url && video.youtube_url.trim()) {
+      if (video.r2_key && video.r2_key.trim()) {
+        finalVideoData.push({
+          video_type: 'r2',
+          video_id: video.r2_key.trim(),
+          video_name: video.video_name && video.video_name.trim() ? video.video_name.trim() : null,
+        });
+      } else if (video.youtube_url && video.youtube_url.trim()) {
         const videoId = extractYouTubeId(video.youtube_url.trim());
         if (videoId) {
-          videoData.push({
+          finalVideoData.push({
             video_type: 'youtube',
             video_id: videoId,
-            video_name: video.video_name && video.video_name.trim() ? video.video_name.trim() : null
+            video_name: video.video_name && video.video_name.trim() ? video.video_name.trim() : null,
           });
         }
       }
     }
-
-    // All videos are YouTube
-    const finalVideoData = videoData.map(video => ({
-      video_type: video.video_type,
-      video_id: video.video_id,
-      video_name: video.video_name
-    }));
 
     // Submit form
     updateSessionMutation.mutate({
@@ -499,81 +583,18 @@ export default function EditHomeworkVideo() {
               </label>
               
               {formData.videos.map((video, index) => (
-                <div key={index} style={{
-                  marginBottom: index < formData.videos.length - 1 ? '24px' : '0',
-                  padding: '20px',
-                  border: '2px solid #e9ecef',
-                  borderRadius: '8px',
-                  backgroundColor: '#f8f9fa'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                    <h4 style={{ margin: 0, color: '#333' }}>Video {index + 1}</h4>
-                    {formData.videos.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeVideo(index)}
-                        style={{
-                          padding: '6px 12px',
-                          backgroundColor: '#dc3545',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          fontSize: '0.875rem',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Video Name Input */}
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500' }}>
-                      Video Name
-                    </label>
-                    <input
-                      type="text"
-                      value={video.video_name || ''}
-                      onChange={(e) => handleVideoNameChange(index, e.target.value)}
-                      placeholder={`Video ${index + 1}`}
-                      style={{
-                        width: '100%',
-                        padding: '10px 12px',
-                        border: '1px solid #ddd',
-                        borderRadius: '6px',
-                        fontSize: '1rem',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-
-                  {/* YouTube URL Input */}
-                  <div style={{ marginBottom: '0' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500' }}>
-                      YouTube URL <span style={{ color: 'red' }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={video.youtube_url}
-                      onChange={(e) => handleYouTubeUrlChange(index, e.target.value)}
-                      placeholder="Enter YouTube Video URL"
-                      style={{
-                        width: '100%',
-                        padding: '10px 12px',
-                        border: errors[`video_${index}_youtube_url`] ? '2px solid #dc3545' : '1px solid #ddd',
-                        borderRadius: '6px',
-                        fontSize: '1rem',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                    {errors[`video_${index}_youtube_url`] && (
-                      <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
-                        {errors[`video_${index}_youtube_url`]}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <VideoInput
+                  key={index}
+                  index={index}
+                  video={video}
+                  onVideoNameChange={handleVideoNameChange}
+                  onYouTubeUrlChange={handleYouTubeUrlChange}
+                  onR2Upload={handleR2Upload}
+                  onRemove={removeVideo}
+                  canRemove={formData.videos.length > 1}
+                  errors={errors}
+                  showUploadTab={showUploadTab}
+                />
               ))}
 
               <button
@@ -754,4 +775,3 @@ export default function EditHomeworkVideo() {
     </div>
   );
 }
-

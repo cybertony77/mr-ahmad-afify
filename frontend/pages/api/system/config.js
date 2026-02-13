@@ -43,6 +43,11 @@ export default async function handler(req, res) {
     const homeworksVideos = envConfig.SYSTEM_HOMEWORKS_VIDEOS === 'true' || process.env.SYSTEM_HOMEWORKS_VIDEOS === 'true';
     const homeworks = envConfig.SYSTEM_HOMEWORKS === 'true' || process.env.SYSTEM_HOMEWORKS === 'true';
     const quizzes = envConfig.SYSTEM_QUIZZES === 'true' || process.env.SYSTEM_QUIZZES === 'true';
+    const mockExams = envConfig.SYSTEM_MOCK_EXAMS === 'true' || process.env.SYSTEM_MOCK_EXAMS === 'true';
+    const cloudflareR2 = envConfig.SYSTEM_CLOUDFLARE_R2 === 'true' || process.env.SYSTEM_CLOUDFLARE_R2 === 'true';
+    const zoomJoinMeeting = envConfig.SYSTEM_ZOOM_JOIN_MEETING === 'true' || process.env.SYSTEM_ZOOM_JOIN_MEETING === 'true';
+    const paymentSystem = envConfig.SYSTEM_PAYMENT_SYSTEM === 'true' || process.env.SYSTEM_PAYMENT_SYSTEM === 'true';
+    const subscription = envConfig.SYSTEM_SUBSCRIPTION === 'true' || process.env.SYSTEM_SUBSCRIPTION === 'true';
     
     res.json({ 
       domain: systemDomain,
@@ -52,7 +57,12 @@ export default async function handler(req, res) {
       online_videos: onlineVideos,
       homeworks_videos: homeworksVideos,
       homeworks: homeworks,
-      quizzes: quizzes
+      quizzes: quizzes,
+      mock_exams: mockExams,
+      cloudflare_r2: cloudflareR2,
+      zoom_join_meeting: zoomJoinMeeting,
+      payment_system: paymentSystem,
+      subscription: subscription
     });
   } catch (error) {
     console.error('Error fetching system config:', error);

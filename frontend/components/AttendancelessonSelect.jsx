@@ -134,7 +134,9 @@ export default function AttendanceLessonSelect({
                 cursor: 'pointer',
                 borderBottom: '1px solid #f8f9fa',
                 transition: 'background-color 0.2s ease',
-                color: '#000000'
+                color: selectedLesson === lesson ? '#1FA8DC' : '#000000',
+                backgroundColor: selectedLesson === lesson ? '#f0f8ff' : '#ffffff',
+                fontWeight: selectedLesson === lesson ? '600' : '400'
               }}
               onClick={() => handleLessonSelect(lesson)}
               onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}

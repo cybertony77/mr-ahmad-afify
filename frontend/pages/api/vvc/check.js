@@ -32,6 +32,7 @@ function loadEnvConfig() {
 const envConfig = loadEnvConfig();
 const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI;
 const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME;
+const PAYMENT_SYSTEM_ENABLED = envConfig.SYSTEM_PAYMENT_SYSTEM === 'true' || process.env.SYSTEM_PAYMENT_SYSTEM === 'true';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -226,6 +227,25 @@ export default async function handler(req, res) {
         { id: studentId },
         { $push: { online_sessions: newSessionEntry } }
       );
+    }
+
+    // Deduct 1 from student.payment.numberOfSessions if payment system is enabled, video is paid and sessions > 0
+    if (PAYMENT_SYSTEM_ENABLED) {
+      try {
+        const onlineSession = await db.collection('online_sessions').findOne({ _id: new ObjectId(session_id) });
+        if (onlineSession && onlineSession.payment_state === 'paid') {
+          const currentSessions = student.payment?.numberOfSessions || 0;
+          if (currentSessions > 0) {
+            await db.collection('students').updateOne(
+              { id: studentId },
+              { $inc: { 'payment.numberOfSessions': -1 } }
+            );
+          }
+        }
+      } catch (sessionErr) {
+        console.error('⚠️ Failed to deduct numberOfSessions:', sessionErr);
+        // Don't fail the VVC check if session deduction fails
+      }
     }
 
     // Get current VVC to return relevant data

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function PeriodSelect({ selectedPeriod, onPeriodChange, required = false, isOpen, onToggle, onClose }) {
+export default function PeriodSelect({ selectedPeriod, onPeriodChange, required = false, isOpen, onToggle, onClose, compact = false }) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const actualIsOpen = isOpen !== undefined ? isOpen : internalIsOpen;
   const actualOnToggle = onToggle || (() => setInternalIsOpen(!internalIsOpen));
@@ -17,23 +17,26 @@ export default function PeriodSelect({ selectedPeriod, onPeriodChange, required 
     <div style={{ position: 'relative', width: '100%' }}>
       <div
         style={{
-          padding: '14px 16px',
+          padding: compact ? '8px 8px' : '14px 16px',
           border: actualIsOpen ? '2px solid #1FA8DC' : '2px solid #e9ecef',
-          borderRadius: '10px',
-          backgroundColor: '#ffffff',
+          borderRadius: compact ? '8px' : '10px',
+          backgroundColor: selectedPeriod ? '#f0f8ff' : '#ffffff',
           cursor: 'pointer',
           display: 'flex',
-          justifyContent: 'space-between',
+          justifyContent: 'center',
           alignItems: 'center',
-          fontSize: '1rem',
-          color: selectedPeriod ? '#000000' : '#adb5bd',
+          fontSize: compact ? '0.9rem' : '1rem',
+          color: selectedPeriod ? '#1FA8DC' : '#adb5bd',
+          fontWeight: selectedPeriod ? '600' : '400',
           transition: 'all 0.3s ease',
-          boxShadow: actualIsOpen ? '0 0 0 3px rgba(31, 168, 220, 0.1)' : 'none'
+          boxShadow: actualIsOpen ? '0 0 0 3px rgba(31, 168, 220, 0.1)' : 'none',
+          minHeight: compact ? '37px' : 'auto',
+          boxSizing: 'border-box'
         }}
         onClick={actualOnToggle}
         onBlur={() => setTimeout(actualOnClose, 200)}
       >
-        <span>{selectedPeriod || 'Select Period'}</span>
+        <span>{selectedPeriod || (compact ? 'AM/PM' : 'Select Period')}</span>
       </div>
       
       {actualIsOpen && (
@@ -47,17 +50,43 @@ export default function PeriodSelect({ selectedPeriod, onPeriodChange, required 
           borderRadius: '10px',
           boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
           zIndex: 1000,
-          marginTop: '4px'
+          marginTop: '4px',
+          minWidth: compact ? '80px' : 'auto'
         }}>
+          {selectedPeriod && (
+            <div
+              key="cancel"
+              style={{
+                padding: compact ? '8px 10px' : '12px 16px',
+                cursor: 'pointer',
+                borderBottom: '1px solid #f8f9fa',
+                transition: 'background-color 0.2s ease',
+                color: '#dc3545',
+                backgroundColor: '#ffffff',
+                fontWeight: '500',
+                textAlign: 'center',
+                fontSize: compact ? '0.85rem' : '1rem'
+              }}
+              onClick={() => handlePeriodSelect('')}
+              onMouseEnter={(e) => e.target.style.backgroundColor = '#fff5f5'}
+              onMouseLeave={(e) => e.target.style.backgroundColor = '#ffffff'}
+            >
+              Cancel
+            </div>
+          )}
           {periods.map((period) => (
             <div
               key={period}
               style={{
-                padding: '12px 16px',
+                padding: compact ? '8px 10px' : '12px 16px',
                 cursor: 'pointer',
                 borderBottom: '1px solid #f8f9fa',
                 transition: 'background-color 0.2s ease',
-                color: '#000000'
+                color: selectedPeriod === period ? '#1FA8DC' : '#000000',
+                backgroundColor: selectedPeriod === period ? '#f0f8ff' : '#ffffff',
+                fontWeight: selectedPeriod === period ? '600' : '400',
+                textAlign: 'center',
+                fontSize: compact ? '0.9rem' : '1rem'
               }}
               onClick={() => handlePeriodSelect(period)}
               onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}

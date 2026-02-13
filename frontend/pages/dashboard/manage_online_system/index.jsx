@@ -13,6 +13,7 @@ export default function ManageOnlineSystem() {
   const isHomeworksVideosEnabled = systemConfig?.homeworks_videos === true || systemConfig?.homeworks_videos === 'true';
   const isHomeworksEnabled = systemConfig?.homeworks === true || systemConfig?.homeworks === 'true';
   const isQuizzesEnabled = systemConfig?.quizzes === true || systemConfig?.quizzes === 'true';
+  const isMockExamsEnabled = systemConfig?.mock_exams === true || systemConfig?.mock_exams === 'true';
   const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
@@ -309,6 +310,17 @@ export default function ManageOnlineSystem() {
             </button>
           )}
 
+          {isMockExamsEnabled && (
+            <button
+              className="dashboard-btn"
+              onClick={() => router.push("/dashboard/manage_online_system/online_mock_exams")}
+              style={{ background: "linear-gradient(90deg, #6f42c1 0%, #8e44ad 100%)" }}
+            >
+              <Image src="/exam.svg" alt="Mock Exams" width={20} height={20} />
+              Online Mock Exams
+            </button>
+          )}
+
           <button 
             className="dashboard-btn"
             onClick={() => router.push("/dashboard/manage_online_system/verification_accounts_codes")}
@@ -371,6 +383,16 @@ export default function ManageOnlineSystem() {
             >
               <Image src="/notepad.svg" alt="Preview Quizzes" width={20} height={20} />
               Preview Student Quizzes
+            </button>
+          )}
+
+          {isMockExamsEnabled && (
+            <button
+              className="dashboard-btn"
+              onClick={() => router.push("/dashboard/manage_online_system/preview_student_mock_exams")}
+            >
+              <Image src="/exam.svg" alt="Preview Mock Exams" width={20} height={20} />
+              Preview Student Mock Exams
             </button>
           )}
 
