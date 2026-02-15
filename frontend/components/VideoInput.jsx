@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 
 export default function VideoInput({
@@ -12,13 +12,25 @@ export default function VideoInput({
   errors,
   showUploadTab,
 }) {
-  const [activeTab, setActiveTab] = useState(video.video_source === 'r2' ? 'upload' : 'youtube');
+  const [activeTab, setActiveTab] = useState(video.video_source === 'r2' && showUploadTab ? 'upload' : 'youtube');
   const [uploadProgress, setUploadProgress] = useState(video.upload_progress || 0);
   const [uploadStatus, setUploadStatus] = useState(video.upload_status || 'idle'); // idle | uploading | done | error
   const [uploadFileName, setUploadFileName] = useState(video.upload_file_name || '');
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef(null);
   const xhrRef = useRef(null);
+
+  // Sync activeTab when video data changes (e.g. edit page loads session data async)
+  useEffect(() => {
+    if (video.video_source === 'r2' && showUploadTab) {
+      setActiveTab('upload');
+      setUploadStatus(video.upload_status || (video.r2_key ? 'done' : 'idle'));
+      setUploadProgress(video.upload_progress || (video.r2_key ? 100 : 0));
+      setUploadFileName(video.upload_file_name || '');
+    } else {
+      setActiveTab('youtube');
+    }
+  }, [video.video_source, video.r2_key, showUploadTab]);
 
   const handleTabSwitch = (tab) => {
     setActiveTab(tab);
@@ -57,18 +69,20 @@ export default function VideoInput({
     setUploadProgress(0);
 
     try {
-      // Step 1: Get signed URL from our API
+      // Step 1: Get the R2 key from our API
       const { data } = await axios.post('/api/upload/r2-signed-url', {
         fileName: file.name,
         contentType: file.type,
       });
 
-      const { signedUrl, key } = data;
+      const { key } = data;
 
-      // Step 2: Upload directly to R2 using XMLHttpRequest for progress tracking
-      // Do NOT set Content-Type header manually - the presigned URL was generated
-      // without content-type in the signature, so sending it would cause a mismatch.
-      // R2 will detect the file type automatically.
+      // Step 2: Upload via proxy API using FormData (same-origin, no CORS issues).
+      // formidable on the server parses the file and uploads it to R2.
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('key', key);
+
       await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhrRef.current = xhr;
@@ -96,8 +110,8 @@ export default function VideoInput({
           reject(new Error('Upload cancelled'));
         });
 
-        xhr.open('PUT', signedUrl);
-        xhr.send(file);
+        xhr.open('POST', '/api/upload/r2-proxy-upload');
+        xhr.send(formData);
       });
 
       // Step 3: Success - save the R2 key

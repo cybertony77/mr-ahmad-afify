@@ -10,7 +10,7 @@ export default function Header() {
   const { data: user } = useProfile();
   const { data: systemConfig } = useSystemConfig();
   const userRole = user?.role || '';
-  const systemName = systemConfig?.name || 'Demo Attendance System';
+  const systemName = systemConfig?.name || 'Dr. Ahmad Hassan';
   
   const handleLogoClick = () => {
     if (userRole === 'student') {
@@ -39,8 +39,8 @@ export default function Header() {
           <img
             src="/logo.png"
             alt={`${systemName} Logo`}
-            width={50}
-            height={50}
+            width={60}
+            height={60}
             style={{ 
               borderRadius: '50%', 
               background: 'white', 
@@ -59,7 +59,7 @@ export default function Header() {
                 width: 48px;
                 height: 48px;
                 border-radius: 50%;
-                background: linear-gradient(135deg, #1FA8DC 0%, #FEB954 100%);
+                background: linear-gradient(330deg, rgb(161, 30, 30) 0%, rgb(223, 106, 71) 50%, rgba(212, 147, 63, 1) 100%);
                 color: white;
                 display: flex;
                 align-items: center;

@@ -675,7 +675,7 @@ function Preloader() {
       left: 0,
       width: '100%',
       height: '100%',
-      background: 'linear-gradient(380deg, #1FA8DC 0%, #FEB954 100%)',
+      background: 'linear-gradient(380deg, #1FA8DC 0%, #FEB954 100%);',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -694,13 +694,13 @@ function Preloader() {
         }}>
           <Image 
             src="/logo.png" 
-            alt="Math Academy Logo" 
+            alt="American Diploma Academy Logo" 
             width={150}
             height={150}
             style={{
-              objectFit: 'cover',
+              borderRadius: '50%',
               background: 'transparent',
-              borderRadius: '50%'
+              
             }}
           />
         </div>
@@ -710,7 +710,7 @@ function Preloader() {
           width: '50px',
           height: '50px',
           border: '4px solid rgba(255, 255, 255, 0.3)',
-          borderTop: '4px solid rgb(0, 7, 14)',
+          borderTop: '4px solid #1FA8DC',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite'
         }} />

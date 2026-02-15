@@ -12,7 +12,7 @@ export default function GradeSelect({ selectedGrade, onGradeChange, required = f
     actualOnClose();
   };
 
-  const grades = showAllOption ? ["EST", "SAT", "ACT", "All"] : ["EST", "SAT", "ACT"];
+  const grades = showAllOption ? ["EST", "SAT", "ACT", "AP", "All"] : ["EST", "SAT", "ACT", "AP"];
 
   return (
     <div style={{ position: 'relative', width: '100%' }}>
@@ -27,7 +27,9 @@ export default function GradeSelect({ selectedGrade, onGradeChange, required = f
           justifyContent: 'space-between',
           alignItems: 'center',
           fontSize: '1rem',
-          color: selectedGrade ? '#000000' : '#adb5bd',
+          color: selectedGrade ? '#1FA8DC' : '#adb5bd',
+          backgroundColor: selectedGrade ? '#f0f8ff' : '#ffffff',
+          fontWeight: selectedGrade ? '600' : '400',
           transition: 'all 0.3s ease',
           boxShadow: actualIsOpen ? '0 0 0 3px rgba(31, 168, 220, 0.1)' : 'none'
         }}
@@ -37,7 +39,6 @@ export default function GradeSelect({ selectedGrade, onGradeChange, required = f
         <span>{selectedGrade || 'Select Course'}</span>
       </div>
       
-
       
       {actualIsOpen && (
         <div style={{

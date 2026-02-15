@@ -171,7 +171,7 @@ export default function QRCodeModal({ isOpen, onClose }) {
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(90deg,rgba(119, 214, 224, 1) 50%, rgba(8, 156, 170, 1) 100%);
+           background: linear-gradient(380deg, #1FA8DC 0%, #FEB954 100%);
           padding: 24px;
           box-shadow: 0 8px 32px rgba(0,0,0,0.1);
           margin: 0 auto;

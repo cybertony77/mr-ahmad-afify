@@ -610,7 +610,7 @@ export default function Login() {
             left: 0;
             right: 0;
             height: 4px;
-            background: linear-gradient(380deg, #1FA8DC 0%, #FEB954 100%);  
+            background: linear-gradient(380deg, #1FA8DC 0%, #FEB954 100%);
             background-size: 200% 100%;
             animation: gradientShift 3s ease infinite;
           }
@@ -894,7 +894,7 @@ export default function Login() {
 
         <div className="login-container">
           <div className="logo-section">
-            <Image src="/logo.png" alt="Logo" width={90} height={90} className="logo-icon" style={{ borderRadius: '50px' }} priority />
+            <Image src="/logo.png" alt="Logo" width={120} height={120} className="logo-icon" style={{ borderRadius: '50%' }} priority />
             <h1 className="title">Application Login</h1>
             <p className="subtitle">Welcome back! Please sign in to continue</p>
           </div>

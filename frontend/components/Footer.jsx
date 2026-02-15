@@ -3,7 +3,7 @@ import { useSystemConfig } from '../lib/api/system';
 export default function Footer() {
   const year = new Date().getFullYear();
   const { data: systemConfig } = useSystemConfig();
-  const systemName = systemConfig?.name || 'Demo Attendance System';
+  const systemName = systemConfig?.name || 'Dr. Ahmad Hassan';
   
   return (
     <footer className="footer" style={{
@@ -11,7 +11,7 @@ export default function Footer() {
       background: 'transparent',
       padding: '20px 0',
       textAlign: 'center',
-      color: '#495057',
+      color: '#ffffff',
       fontWeight: 600,
       fontSize: 16,
       letterSpacing: 0.5,

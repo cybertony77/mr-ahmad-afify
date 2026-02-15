@@ -53,7 +53,7 @@ export default function ContactDeveloperPage() {
     return (
       <div style={{
         minHeight: "100vh",
-        background: "linear-gradient(380deg, #1FA8DC 0%, #FEB954 100%);",
+        background: 'linear-gradient(380deg, #1FA8DC 0%, #FEB954 100%);',
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -156,8 +156,7 @@ export default function ContactDeveloperPage() {
               background: linear-gradient(
                 90deg,
                 #1FA8DC 0%,
-                #FEB954 50%,
-                #1FA8DC 100%
+                #FEB954 100%
               );
               background-size: 200% 100%;
               animation: shimmer 2s ease-in-out infinite;
@@ -210,7 +209,7 @@ export default function ContactDeveloperPage() {
               width: "50px",
               height: "50px",
               border: "4px solid rgba(31, 168, 220, 0.2)",
-              borderTop: "4px solid #1FA8DC",
+              borderTop: "4px solid rgb(65, 65, 65)",
               borderRadius: "50%",
               margin: "0 auto 24px auto",
               animation: "spin 1s linear infinite"

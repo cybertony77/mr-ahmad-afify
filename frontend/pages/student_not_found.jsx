@@ -10,7 +10,7 @@ export default function StudentNotFound() {
   return (
     <div style={{ 
       minHeight: "100vh",
-      background: "linear-gradient(90deg,rgba(158, 158, 158, 1) 0%, rgba(99, 191, 191, 1) 50%, rgba(8, 156, 170, 1) 100%)",
+      background: 'linear-gradient(330deg, rgb(161, 30, 30) 0%, rgb(223, 106, 71) 50%, rgba(212, 147, 63, 1) 100%)',
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
@@ -105,7 +105,7 @@ export default function StudentNotFound() {
           .error-code {
             font-size: 8rem;
             font-weight: 900;
-            background: linear-gradient(135deg, #1FA8DC 0%, #FEB954 100%);
+            background: linear-gradient(380deg, #1FA8DC 0%, #FEB954 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -124,7 +124,7 @@ export default function StudentNotFound() {
             transform: translateX(-50%);
             width: 80px;
             height: 4px;
-            background: linear-gradient(135deg, #1FA8DC 0%, #FEB954 100%);
+            background: linear-gradient(380deg, #1FA8DC 0%, #FEB954 100%);
             border-radius: 2px;
           }
           

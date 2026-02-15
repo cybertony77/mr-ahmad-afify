@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start -p 3700",
+    "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.989.0",
+    "@aws-sdk/lib-storage": "^3.990.0",
     "@aws-sdk/s3-request-presigner": "^3.989.0",
     "@gorules/zen-engine": "^0.52.1",
     "@mantine/core": "^8.2.1",

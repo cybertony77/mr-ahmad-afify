@@ -56,14 +56,23 @@ export default async function handler(req, res) {
       forcePathStyle: true,
     });
 
+    const systemDomain = envConfig.SYSTEM_DOMAIN || process.env.SYSTEM_DOMAIN || '';
+
+    const allowedOrigins = ['http://localhost:3000'];
+    if (systemDomain) {
+      // Add the domain with and without trailing slash
+      const domain = systemDomain.replace(/\/+$/, '');
+      allowedOrigins.push(domain);
+    }
+
     const command = new PutBucketCorsCommand({
       Bucket: bucketName,
       CORSConfiguration: {
         CORSRules: [
           {
             AllowedHeaders: ['*'],
-            AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
-            AllowedOrigins: ['*'],
+            AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS'],
+            AllowedOrigins: allowedOrigins,
             ExposeHeaders: ['ETag', 'Content-Length', 'Content-Type'],
             MaxAgeSeconds: 86400,
           },
