@@ -12,7 +12,7 @@ export default function GradeSelect({ selectedGrade, onGradeChange, required = f
     actualOnClose();
   };
 
-  const grades = showAllOption ? ["EST", "SAT", "ACT", "AP", "All"] : ["EST", "SAT", "ACT", "AP"];
+  const grades = showAllOption ? ["EST", "SAT", "ACT", "All"] : ["EST", "SAT", "ACT"];
 
   return (
     <div style={{ position: 'relative', width: '100%' }}>

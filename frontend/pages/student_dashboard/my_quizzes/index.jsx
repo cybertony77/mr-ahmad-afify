@@ -557,7 +557,7 @@ export default function MyQuizzes() {
             fontWeight: '700',
             color: '#212529'
           }}>
-            Quiz Performance by Week
+            Quiz Performance by Lesson
           </h2>
           {isChartLoading ? (
             <div style={{
@@ -632,7 +632,7 @@ export default function MyQuizzes() {
           {/* Quizzes List */}
           {filteredQuizzes.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
-              {quizzes.length === 0 ? 'No quizzes available.' : 'No quizzes match your filters.'}
+              {quizzes.length === 0 ? '❌ No quizzes available.' : '❌ No quizzes match your filters.'}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

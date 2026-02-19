@@ -561,7 +561,7 @@ export default function MyHomeworks() {
             fontWeight: '700',
             color: '#212529'
           }}>
-            Homework Performance by Week
+            Homework Performance by Lesson
           </h2>
           {isChartLoading ? (
             <div style={{
@@ -636,7 +636,7 @@ export default function MyHomeworks() {
           {/* Homeworks List */}
           {filteredHomeworks.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
-              {homeworks.length === 0 ? '❌ No homeworks available.' : 'No homeworks match your filters.'}
+              {homeworks.length === 0 ? '❌ No homeworks available.' : '❌ No homeworks match your filters.'}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
