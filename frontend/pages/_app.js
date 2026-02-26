@@ -1219,7 +1219,7 @@ export default function App({ Component, pageProps }) {
       try {
         // Only show loading spinner on initial load, not during background polling
         if (!isBackgroundPoll) {
-          setIsLoadingSubscription(true);
+        setIsLoadingSubscription(true);
         }
         const response = await apiClient.get('/api/subscription');
         setSubscription(response.data);
@@ -1235,8 +1235,8 @@ export default function App({ Component, pageProps }) {
       } finally {
         // Only clear loading spinner if it was set (not during background polling)
         if (!isBackgroundPoll) {
-          setIsLoadingSubscription(false);
-        }
+        setIsLoadingSubscription(false);
+      }
       }
     };
 
