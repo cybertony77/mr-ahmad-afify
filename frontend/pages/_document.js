@@ -11,7 +11,7 @@ export default function Document() {
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" />
 
         {/* Theme & App Settings */}
-        <meta name="theme-color" content="#00101f" />
+        <meta name="theme-color" content="#011E46" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
