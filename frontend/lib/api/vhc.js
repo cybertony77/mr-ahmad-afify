@@ -27,6 +27,7 @@ const vhcApi = {
     }
     if (params.code_state) queryParams.append('code_state', params.code_state);
     if (params.payment_state) queryParams.append('payment_state', params.payment_state);
+    if (params.code_lesson) queryParams.append('code_lesson', params.code_lesson);
     
     const queryString = queryParams.toString();
     const url = queryString ? `/api/vhc?${queryString}` : '/api/vhc';

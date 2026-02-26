@@ -56,12 +56,12 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Forbidden: Access denied' });
     }
 
-    const { VHC, session_id } = req.body;
+    const { VHC, session_id, lesson } = req.body;
 
     if (!VHC || VHC.length !== 9) {
       return res.status(400).json({ 
         success: false,
-        error: '❌ Sorry, this code is incorrect',
+        error: '❌ Sorry, Wrong VHC, recheck your VHC',
         valid: false 
       });
     }
@@ -88,9 +88,20 @@ export default async function handler(req, res) {
     if (!vhcRecord) {
       return res.status(200).json({ 
         success: false,
-        error: '❌ Sorry, This code is incorrect',
+        error: '❌ Sorry, Wrong VHC, recheck your VHC',
         valid: false 
       });
+    }
+
+    // Check lesson restriction
+    if (vhcRecord.code_lesson && vhcRecord.code_lesson !== 'All' && lesson) {
+      if (vhcRecord.code_lesson.toLowerCase() !== lesson.toLowerCase()) {
+        return res.status(200).json({ 
+          success: false,
+          error: '❌ Sorry, Wrong VHC, recheck your VHC',
+          valid: false 
+        });
+      }
     }
 
     // Check if code is deactivated
@@ -100,6 +111,18 @@ export default async function handler(req, res) {
         error: '❌ Sorry, This code is deactivated',
         valid: false 
       });
+    }
+
+    // Check lesson restriction
+    const codeLesson = vhcRecord.code_lesson || 'All';
+    if (codeLesson !== 'All' && lesson) {
+      if (codeLesson !== lesson) {
+        return res.status(200).json({
+          success: false,
+          error: '❌ Sorry, Wrong VHC, recheck your VHC',
+          valid: false
+        });
+      }
     }
 
     // Check deadline date if code_settings is 'deadline_date'
@@ -281,7 +304,8 @@ export default async function handler(req, res) {
       vhc_id: vhcRecord._id.toString(),
       code_settings: codeSettings,
       number_of_views: updatedVhc.number_of_views || null,
-      deadline_date: updatedVhc.deadline_date || null
+      deadline_date: updatedVhc.deadline_date || null,
+      code_lesson: codeLesson
     });
   } catch (error) {
     console.error('❌ Error in VHC check API:', error);

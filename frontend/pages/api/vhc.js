@@ -96,7 +96,7 @@ export default async function handler(req, res) {
       const db = client.db(DB_NAME);
 
       // Check if pagination parameters are provided
-      const { page, limit, search, sortBy, sortOrder, viewed, code_state, payment_state } = req.query;
+      const { page, limit, search, sortBy, sortOrder, viewed, code_state, payment_state, code_lesson } = req.query;
       const hasPagination = page || limit;
 
       if (hasPagination) {
@@ -133,6 +133,17 @@ export default async function handler(req, res) {
         // Filter: payment_state
         if (payment_state && payment_state !== '') {
           vhcQueryFilter.payment_state = payment_state;
+        }
+
+        // Filter: code_lesson
+        if (code_lesson && code_lesson !== '') {
+          if (code_lesson === 'All') {
+            // Filter for codes with code_lesson = 'All'
+            vhcQueryFilter.code_lesson = 'All';
+          } else {
+            // Use case-insensitive regex for code_lesson matching
+            vhcQueryFilter.code_lesson = { $regex: `^${code_lesson.trim()}$`, $options: 'i' };
+          }
         }
 
         // Get total count for pagination
@@ -236,7 +247,7 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'Forbidden: Access denied' });
       }
 
-      const { number_of_codes, code_settings, number_of_views, deadline_date, code_state } = req.body;
+      const { number_of_codes, code_settings, number_of_views, deadline_date, code_state, code_lesson } = req.body;
 
       // Validation
       const codesCount = number_of_codes ? parseInt(number_of_codes) : 1;
@@ -288,6 +299,7 @@ export default async function handler(req, res) {
         const vhcData = {
           VHC: code,
           code_settings: code_settings,
+          code_lesson: (typeof code_lesson === 'string' && code_lesson.trim()) ? code_lesson.trim() : 'All',
           viewed: false,
           viewed_by_who: null,
           code_state: code_state,
@@ -332,7 +344,7 @@ export default async function handler(req, res) {
       }
 
       const { id } = req.query;
-      const { code_settings, number_of_views, deadline_date, code_state, payment_state } = req.body;
+      const { code_settings, number_of_views, deadline_date, code_state, payment_state, code_lesson } = req.body;
 
       if (!id) {
         return res.status(400).json({ error: 'VHC ID is required' });
@@ -401,6 +413,9 @@ export default async function handler(req, res) {
       }
       if (payment_state !== undefined) {
         update.payment_state = payment_state;
+      }
+      if (code_lesson !== undefined) {
+        update.code_lesson = (typeof code_lesson === 'string' && code_lesson.trim()) ? code_lesson.trim() : 'All';
       }
 
       if (Object.keys(update).length === 0) {

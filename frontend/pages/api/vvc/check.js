@@ -47,12 +47,12 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Forbidden: Access denied' });
     }
 
-    const { VVC, session_id } = req.body;
+    const { VVC, session_id, lesson } = req.body;
 
     if (!VVC || VVC.length !== 9) {
       return res.status(400).json({ 
         success: false,
-        error: '❌ Sorry, this code is incorrect',
+        error: '❌ Sorry, Wrong VVC, recheck your VVC',
         valid: false 
       });
     }
@@ -79,9 +79,20 @@ export default async function handler(req, res) {
     if (!vvcRecord) {
       return res.status(200).json({ 
         success: false,
-        error: '❌ Sorry, this code is incorrect',
+        error: '❌ Sorry, Wrong VVC, recheck your VVC',
         valid: false 
       });
+    }
+
+    // Check lesson restriction
+    if (vvcRecord.code_lesson && vvcRecord.code_lesson !== 'All' && lesson) {
+      if (vvcRecord.code_lesson.toLowerCase() !== lesson.toLowerCase()) {
+        return res.status(200).json({ 
+          success: false,
+          error: '❌ Sorry, Wrong VVC, recheck your VVC',
+          valid: false 
+        });
+      }
     }
 
     // Check if code is deactivated
@@ -91,6 +102,18 @@ export default async function handler(req, res) {
         error: '❌ Sorry, this code is deactivated',
         valid: false 
       });
+    }
+
+    // Check lesson restriction
+    const codeLesson = vvcRecord.code_lesson || 'All';
+    if (codeLesson !== 'All' && lesson) {
+      if (codeLesson !== lesson) {
+        return res.status(200).json({
+          success: false,
+          error: '❌ Sorry, Wrong VVC, recheck your VVC',
+          valid: false
+        });
+      }
     }
 
     // Check deadline date if code_settings is 'deadline_date'
@@ -257,6 +280,7 @@ export default async function handler(req, res) {
       message: 'VVC validated successfully',
       vvc_id: vvcRecord._id.toString(),
       code_settings: codeSettings,
+      code_lesson: codeLesson,
       number_of_views: updatedVvc.number_of_views || null,
       deadline_date: updatedVvc.deadline_date || null
     });
