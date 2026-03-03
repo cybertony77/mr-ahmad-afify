@@ -643,6 +643,11 @@ export default function EditHomework() {
       newErrors.show_details_after_submitting = '❌ Show details after submitting is required';
     }
 
+    // Validate account state
+    if (!accountState || accountState.trim() === '') {
+      newErrors.accountState = '❌ Account State is required';
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -912,7 +917,14 @@ export default function EditHomework() {
               onChange={setAccountState}
               label="Homeworks State"
               placeholder="Select Homeworks State"
+              required={true}
+              error={errors.accountState}
             />
+            {errors.accountState && (
+              <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
+                {errors.accountState}
+              </div>
+            )}
 
             {/* Lesson Name */}
             <div style={{ marginBottom: '20px' }}>

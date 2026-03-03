@@ -246,6 +246,11 @@ export default function AddOnlineSession() {
       newErrors.name = '❌ Name is required';
     }
 
+    // Validate account state
+    if (!accountState || accountState.trim() === '') {
+      newErrors.accountState = '❌ Account State is required';
+    }
+
     // Validate videos - at least one must have either youtube_url or r2_key
     const validVideos = formData.videos.filter(video => {
       return (video.youtube_url && video.youtube_url.trim()) || (video.r2_key && video.r2_key.trim());
@@ -437,7 +442,14 @@ export default function AddOnlineSession() {
               onChange={setAccountState}
               label="Video State"
               placeholder="Select Video State"
+              required={true}
+              error={errors.accountState}
             />
+            {errors.accountState && (
+              <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
+                {errors.accountState}
+              </div>
+            )}
 
             {/* Video Payment State Radio */}
             <div style={{ marginBottom: '20px' }}>
