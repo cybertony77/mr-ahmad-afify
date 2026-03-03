@@ -96,29 +96,40 @@ export default function SignUp() {
 
   const handleVACChange = (e, index) => {
     const rawValue = e.target.value;
-    const value = rawValue.replace(/[^a-zA-Z0-9]/g, '');
-
-    if (!value) return;
+    const sanitized = rawValue.replace(/[^a-zA-Z0-9]/g, '');
 
     const newVac = [...form.vac];
 
-    // If multiple characters entered (paste on mobile / desktop)
-    if (value.length > 1) {
-      const chars = value.slice(0, 7).split('');
-      chars.forEach((char, i) => {
-        if (i < 7) newVac[i] = char;
-      });
-
+    // ✅ Allow clearing (delete)
+    if (sanitized.length === 0) {
+      newVac[index] = '';
       setForm({ ...form, vac: newVac });
-      setError('');
-      vacInputRefs.current[Math.min(chars.length - 1, 6)]?.focus();
       return;
     }
 
-    // Normal single character
-    newVac[index] = value[0];
+    // ✅ Full paste (7 characters)
+    if (sanitized.length === 7) {
+      const chars = sanitized.split('');
+      setForm({ ...form, vac: chars });
+      vacInputRefs.current[6]?.focus();
+      return;
+    }
+
+    // ✅ Partial paste
+    if (sanitized.length > 1) {
+      for (let i = 0; i < sanitized.length && index + i < 7; i++) {
+        newVac[index + i] = sanitized[i];
+      }
+      setForm({ ...form, vac: newVac });
+
+      const nextIndex = Math.min(index + sanitized.length, 6);
+      vacInputRefs.current[nextIndex]?.focus();
+      return;
+    }
+
+    // ✅ Normal single character typing
+    newVac[index] = sanitized;
     setForm({ ...form, vac: newVac });
-    setError('');
 
     if (index < 6) {
       vacInputRefs.current[index + 1]?.focus();
@@ -143,11 +154,24 @@ export default function SignUp() {
   };
 
   const handleKeyDown = (e, index) => {
-    if (e.key === 'Backspace' && !form.vac[index] && index > 0) {
+    if (e.key === 'Backspace') {
+      const newVac = [...form.vac];
+
+      if (newVac[index]) {
+        // If current has value → clear it
+        newVac[index] = '';
+        setForm({ ...form, vac: newVac });
+      } else if (index > 0) {
+        // If already empty → move back
+        vacInputRefs.current[index - 1]?.focus();
+      }
+    }
+
+    if (e.key === 'ArrowLeft' && index > 0) {
       vacInputRefs.current[index - 1]?.focus();
-    } else if (e.key === 'ArrowLeft' && index > 0) {
-      vacInputRefs.current[index - 1]?.focus();
-    } else if (e.key === 'ArrowRight' && index < 6) {
+    }
+
+    if (e.key === 'ArrowRight' && index < 6) {
       vacInputRefs.current[index + 1]?.focus();
     }
   };

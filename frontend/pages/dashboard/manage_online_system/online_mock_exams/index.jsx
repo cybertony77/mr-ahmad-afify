@@ -8,6 +8,7 @@ import CourseSelect from '../../../../components/CourseSelect';
 import CourseTypeSelect from '../../../../components/CourseTypeSelect';
 import MockExamSelect from '../../../../components/MockExamSelect';
 import TimerSelect from '../../../../components/TimerSelect';
+import AccountStateSelect from '../../../../components/AccountStateSelect';
 import { useSystemConfig } from '../../../../lib/api/system';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
@@ -64,6 +65,7 @@ export default function MockExams() {
   const [filterCourseType, setFilterCourseType] = useState('');
   const [filterMockExam, setFilterMockExam] = useState('');
   const [filterTimer, setFilterTimer] = useState('');
+  const [filterAccountState, setFilterAccountState] = useState('');
   const [filterCourseDropdownOpen, setFilterCourseDropdownOpen] = useState(false);
   const [filterCourseTypeDropdownOpen, setFilterCourseTypeDropdownOpen] = useState(false);
   const [filterTimerDropdownOpen, setFilterTimerDropdownOpen] = useState(false);
@@ -127,6 +129,14 @@ export default function MockExams() {
         if (mockExam.timer && mockExam.timer !== 0 && mockExam.timer !== null) {
           return false;
         }
+      }
+    }
+
+    // Account state filter
+    if (filterAccountState) {
+      const state = mockExam.state || mockExam.account_state || 'Activated';
+      if (state !== filterAccountState) {
+        return false;
       }
     }
 
@@ -389,6 +399,20 @@ export default function MockExams() {
                 onClose={() => setFilterTimerDropdownOpen(false)}
               />
             </div>
+            <div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
+              <label className="filter-label" style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#495057', fontSize: '0.95rem' }}>
+                Filter by Mock Exam State
+              </label>
+              <AccountStateSelect
+                label="Mock Exam State"
+                value={filterAccountState || null}
+                onChange={(state) => {
+                  setFilterAccountState(state || '');
+                }}
+                placeholder="Select Mock Exam State"
+                style={{ marginBottom: 0, hideLabel: true }}
+              />
+            </div>
           </div>
         </div>
 
@@ -460,8 +484,22 @@ export default function MockExams() {
                     <div style={{ color: '#6c757d', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       {mockExam.mock_exam_type === 'pdf' ? (
                         <div style={{ padding: '12px 16px', backgroundColor: '#ffffff', border: '2px solid #e9ecef', borderRadius: '8px', fontSize: '0.95rem', color: '#495057', textAlign: 'left', display: 'inline-block', maxWidth: '350px' }}>
-                          <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-                            {`File Name : ${mockExam.pdf_file_name || 'file'}.pdf`}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            {(() => {
+                              const itemState = mockExam.state || mockExam.account_state || 'Activated';
+                              const stateColor = itemState === 'Activated' ? '#28a745' : '#dc3545';
+                              return (
+                                <>
+                                  <span style={{ color: stateColor, fontWeight: '600' }}>
+                                    {itemState}
+                                  </span>
+                                  <span>•</span>
+                                </>
+                              );
+                            })()}
+                            <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+                              {`File Name : ${mockExam.pdf_file_name || 'file'}.pdf`}
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -477,6 +515,18 @@ export default function MockExams() {
                         maxWidth: '350px'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          {(() => {
+                            const itemState = mockExam.state || mockExam.account_state || 'Activated';
+                            const stateColor = itemState === 'Activated' ? '#28a745' : '#dc3545';
+                            return (
+                              <>
+                                <span style={{ color: stateColor, fontWeight: '600' }}>
+                                  {itemState}
+                                </span>
+                                <span>•</span>
+                              </>
+                            );
+                          })()}
                           <span>{mockExam.questions?.length || 0} Question{mockExam.questions?.length !== 1 ? 's' : ''}</span>
                           <span>•</span>
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -920,6 +970,18 @@ export default function MockExams() {
           }
           .analytics-stat-label {
             font-size: 0.8rem;
+          }
+          .mock-exam-item {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 16px;
+          }
+          .mock-exam-buttons {
+            width: 100%;
+            flex-direction: column;
+          }
+          .mock-exam-buttons button {
+            width: 100%;
           }
           .page-wrapper {
             padding: 10px 5px;
