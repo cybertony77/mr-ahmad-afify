@@ -34,13 +34,20 @@ const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI;
 const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME;
 const PAYMENT_SYSTEM_ENABLED = envConfig.SYSTEM_PAYMENT_SYSTEM === 'true' || process.env.SYSTEM_PAYMENT_SYSTEM === 'true';
 
-// Format date as DD/MM/YYYY
+// Format date as DD/MM/YYYY at HH:MM AM/PM
 function formatDate(date) {
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
   
-  return `${day}/${month}/${year}`;
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const hoursStr = String(hours).padStart(2, '0');
+  
+  return `${day}/${month}/${year} at ${hoursStr}:${minutes} ${ampm}`;
 }
 
 export default async function handler(req, res) {
@@ -147,7 +154,8 @@ export default async function handler(req, res) {
         today.setHours(0, 0, 0, 0);
         deadlineDate.setHours(0, 0, 0, 0);
         
-        if (deadlineDate <= today) {
+        // Allow use until the end of the deadline day (deadlineDate < today means expired)
+        if (deadlineDate < today) {
           return res.status(200).json({ 
             success: false,
             error: '❌ Sorry, This code is expired',
@@ -156,30 +164,24 @@ export default async function handler(req, res) {
         }
       }
     } else {
-      // Check if code is already used or invalid (for number_of_views)
-      // Error if: viewed === true OR (viewed_by_who != null AND viewed_by_who != user id) OR number_of_views <= 0
-      // Valid if: viewed === false AND (viewed_by_who === null OR viewed_by_who === user id) AND number_of_views > 0
-      if (vhcRecord.viewed === true) {
+      // Check if code is valid for number_of_views
+      // ❌ Block if: number_of_views <= 0  OR  code already belongs to another student
+      // ✅ Allow if: number_of_views > 0 AND (viewed_by_who is null OR equals current student)
+
+      // No views remaining
+      if (vhcRecord.number_of_views === null || vhcRecord.number_of_views <= 0) {
         return res.status(200).json({ 
           success: false,
-          error: '❌ Sorry, This code is already used',
+          error: '❌ Sorry, this code has no views remaining',
           valid: false 
         });
       }
 
-      if (vhcRecord.number_of_views <= 0) {
-        return res.status(200).json({ 
-          success: false,
-          error: '❌ Sorry, This code is already used',
-          valid: false 
-        });
-      }
-
-      // Check if viewed_by_who is not null and not equal to user id
+      // Code is already assigned to a different student
       if (vhcRecord.viewed_by_who !== null && vhcRecord.viewed_by_who !== studentId) {
         return res.status(200).json({ 
           success: false,
-          error: '❌ Sorry, This code is already used',
+          error: '❌ Sorry, this code is already used by another student',
           valid: false 
         });
       }
@@ -292,6 +294,34 @@ export default async function handler(req, res) {
         console.error('⚠️ Failed to deduct numberOfSessions:', sessionErr);
         // Don't fail the VHC check if session deduction fails
       }
+    }
+
+    // Save to student's homeworks_videos array (similar to online_sessions for VVC)
+    // Ensure homeworks_videos array exists
+    const homeworksVideos = student.homeworks_videos || [];
+    
+    // Check if this session is already in homeworks_videos
+    const existingSessionIndex = homeworksVideos.findIndex(s => s.video_id === session_id);
+    
+    const newSessionEntry = {
+      video_id: session_id,
+      vhc_id: vhcRecord._id.toString(),
+      date: formatDate(new Date())
+    };
+    
+    if (existingSessionIndex !== -1) {
+      // Override existing entry with new VHC
+      homeworksVideos[existingSessionIndex] = newSessionEntry;
+      await db.collection('students').updateOne(
+        { id: studentId },
+        { $set: { homeworks_videos: homeworksVideos } }
+      );
+    } else {
+      // Add new entry to homeworks_videos
+      await db.collection('students').updateOne(
+        { id: studentId },
+        { $push: { homeworks_videos: newSessionEntry } }
+      );
     }
 
     // Get current VHC to return relevant data
