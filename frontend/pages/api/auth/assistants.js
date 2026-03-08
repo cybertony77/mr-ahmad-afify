@@ -188,7 +188,7 @@ export default async function handler(req, res) {
         account_state: (typeof account_state === 'string' ? account_state : "Activated"), 
         ATCA: (typeof ATCA === 'string' ? ATCA : "no"),
         device_limitations: {
-          allowed_devices: 1,
+          allowed_devices: 2,
           last_login: null,
           devices: []
         }

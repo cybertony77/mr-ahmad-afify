@@ -1974,8 +1974,7 @@ export default function QR() {
                   ? '✅ Attended' 
                   : '❌ Absent'}
             </span>
-            {/* Homework status badge hidden */}
-            {/*
+            {/* Homework status badge */}
             <span className={`status-badge ${(() => {
               // Always read from database - try rawStudent.lessons first, then fallback to student object
               let dbHwDone = null;
@@ -2083,7 +2082,6 @@ export default function QR() {
                 return '❌ Homework: Not Done';
               })()}
             </span>
-            */}
             
             <span className={`status-badge ${(!attendanceCenter || !selectedLesson) 
               ? 'status-not-attended' 
@@ -2167,8 +2165,7 @@ export default function QR() {
                   : '✅ Mark as Attended'}
             </button>
 
-            {/* Homework Status Controls hidden */}
-            {/*
+            {/* Homework Status Controls */}
             <div className="homework-section">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span className="homework-label">HOMEWORK STATUS :</span>
@@ -2415,9 +2412,8 @@ export default function QR() {
                 <span>NO HOMEWORK</span>
               </label>
             </div>
-            */}
-            {/* Mark as H.W Done button - hidden as requested */}
-            {/*
+
+            {/* Mark as H.W Done button */}
             {!noHomework && !notCompleted && (
               <button
                 className="toggle-btn"
@@ -2477,7 +2473,6 @@ export default function QR() {
                 })()}
               </button>
             )}
-            */}
 
             {/* Homework Degree Input Section - Show when homework is done (even if not attended, but disabled) */}
             {!noHomework && !notCompleted && (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) === true && (

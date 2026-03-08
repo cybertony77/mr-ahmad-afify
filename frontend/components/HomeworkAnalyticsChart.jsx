@@ -104,7 +104,14 @@ export default function HomeworkAnalyticsChart({ analyticsData }) {
                 border: '1px solid #dee2e6',
                 borderRadius: '8px',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                fontSize: '0.875rem'
+                fontSize: '0.875rem',
+                maxWidth: '90vw',
+                minWidth: '200px',
+                padding: '12px',
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
+                whiteSpace: 'normal',
+                overflow: 'visible'
               }}
               labelStyle={{ display: 'none' }}
               formatter={(value, name, props) => {
@@ -114,24 +121,58 @@ export default function HomeworkAnalyticsChart({ analyticsData }) {
                 const percentage = totalStudents > 0 ? ((count / totalStudents) * 100).toFixed(1) : '0.0';
                 const studentIds = props.payload.studentIds || [];
                 
-                // Format student IDs
+                // Format student IDs - show first 30, put every 10 on a new line
                 let idsDisplay = null;
+                let idsLabel = 'IDs: ';
                 if (count > 0 && studentIds.length > 0) {
-                  if (count <= 5) {
-                    idsDisplay = `IDs: ${studentIds.join(', ')}`;
-                  } else {
-                    const firstFive = studentIds.slice(0, 5);
-                    idsDisplay = `The First 5 IDs: ${firstFive.join(', ')}`;
+                  const idsToShow = studentIds.length >= 30 ? studentIds.slice(0, 30) : studentIds;
+                  idsLabel = idsToShow.length >= 30 ? 'The First 30 IDs: ' : 'IDs: ';
+                  
+                  // Group IDs into chunks of 10
+                  const chunks = [];
+                  for (let i = 0; i < idsToShow.length; i += 10) {
+                    chunks.push(idsToShow.slice(i, i + 10));
                   }
+                  
+                  idsDisplay = chunks.map((chunk, index) => (
+                    <span key={index}>
+                      {chunk.join(', ')}
+                      {index < chunks.length - 1 && <br />}
+                    </span>
+                  ));
                 }
                 
                 return [
-                  <div key="tooltip" style={{ color: '#000000' }}>
+                  <div key="tooltip" style={{ 
+                    color: '#000000',
+                    maxWidth: '100%',
+                    width: '100%',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
+                    boxSizing: 'border-box'
+                  }}>
                     <div><strong style={{ color: '#000000' }}>Category:</strong> {barName}</div>
                     <div><strong style={{ color: '#000000' }}>Students No. :</strong> {count}</div>
                     <div><strong style={{ color: '#000000' }}>Percentage:</strong> {percentage}%</div>
                     {idsDisplay && (
-                      <div><strong style={{ color: '#000000' }}>{idsDisplay}</strong></div>
+                      <div style={{
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word',
+                        whiteSpace: 'normal',
+                        maxWidth: '100%',
+                        display: 'block',
+                        lineHeight: '1.5'
+                      }}>
+                        <strong style={{ color: '#000000', display: 'inline' }}>{idsLabel}</strong>
+                        <span style={{
+                          display: 'inline',
+                          wordBreak: 'break-word',
+                          overflowWrap: 'anywhere',
+                          whiteSpace: 'normal'
+                        }}>
+                          {idsDisplay}
+                        </span>
+                      </div>
                     )}
                   </div>
                 ];

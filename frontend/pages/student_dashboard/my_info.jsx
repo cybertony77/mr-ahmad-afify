@@ -228,8 +228,8 @@ export default function MyInfo() {
     // Count missing homework (only for lessons that exist in student records)
     const missingHW = availableLessons.filter(l => l && (l.hwDone === false || l.hwDone === "Not Completed" || l.hwDone === "not completed" || l.hwDone === "NOT COMPLETED")).length;
     
-    // Count unattended quizzes (only for lessons that exist in student records)
-    const unattendQuiz = availableLessons.filter(l => l && (l.quizDegree === "Didn't Attend The Quiz" || l.quizDegree == null)).length;
+    // Count unattended quizzes (only for lessons that exist in student records) - exclude "No Quiz" and null
+    const unattendQuiz = availableLessons.filter(l => l && l.quizDegree === "Didn't Attend The Quiz").length;
     
     return { absent, missingHW, unattendQuiz };
   };
@@ -381,7 +381,7 @@ export default function MyInfo() {
     const availableLessons = getAvailableLessons();
     
     return availableLessons
-      .filter(l => l && (l.quizDegree === "Didn't Attend The Quiz" || l.quizDegree == null))
+      .filter(l => l && l.quizDegree === "Didn't Attend The Quiz")
       .map(l => ({
         lesson: l.lesson,
         quizDegree: l.quizDegree
@@ -979,7 +979,7 @@ export default function MyInfo() {
                           </Table.Td>
                           <Table.Td style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>
                             {(() => {
-                              const value = lessonData.quizDegree !== null && lessonData.quizDegree !== undefined && lessonData.quizDegree !== '' ? lessonData.quizDegree : '0/0';
+                              const value = lessonData.quizDegree !== null && lessonData.quizDegree !== undefined && lessonData.quizDegree !== '' ? lessonData.quizDegree : 'No Quiz';
                               if (value === "Didn't Attend The Quiz") {
                                 return <span style={{ color: '#dc3545', fontWeight: 'bold', fontSize: '1rem' }}>❌ Didn't Attend The Quiz</span>;
                               } else if (value === "No Quiz") {
@@ -1365,7 +1365,7 @@ export default function MyInfo() {
                                   info.quizDegree === "No Quiz" ?
                                   '0 2px 4px rgba(244, 67, 54, 0.2)' : '0 2px 4px rgba(66, 165, 245, 0.2)'
                               }}>
-                                {info.quizDegree == null ? '0/0' : 
+                                {info.quizDegree == null || info.quizDegree === '' ? '🚫 No Quiz' : 
                                   info.quizDegree === "Didn't Attend The Quiz" ? '❌ Didn\'t Attend' : 
                                   info.quizDegree === "No Quiz" ? "🚫 No Quiz" : 
                                   String(info.quizDegree)}

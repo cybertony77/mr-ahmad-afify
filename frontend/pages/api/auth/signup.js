@@ -120,7 +120,7 @@ export default async function handler(req, res) {
       role: 'student',
       password: hashedPassword,
       device_limitations: {
-        allowed_devices: 1,
+        allowed_devices: 2,
         last_login: null,
         devices: []
       }

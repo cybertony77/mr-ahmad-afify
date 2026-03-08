@@ -131,7 +131,7 @@ export function SessionTable({
   const getUnattendQuizLessons = (student) => {
     const availableLessons = getAvailableLessons(student);
     return availableLessons
-      .filter(lesson => lesson && (lesson.quizDegree === "Didn't Attend The Quiz" || lesson.quizDegree == null))
+      .filter(lesson => lesson && lesson.quizDegree === "Didn't Attend The Quiz")
       .map(lesson => ({
         lesson: lesson.lesson,
         attended: lesson.attended,
