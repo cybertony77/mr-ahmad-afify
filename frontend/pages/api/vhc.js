@@ -141,8 +141,9 @@ export default async function handler(req, res) {
             // Filter for codes with code_lesson = 'All'
             vhcQueryFilter.code_lesson = 'All';
           } else {
-            // Use case-insensitive regex for code_lesson matching
-            vhcQueryFilter.code_lesson = { $regex: `^${code_lesson.trim()}$`, $options: 'i' };
+            // Use case-insensitive "contains" match for code_lesson to be more tolerant
+            const safeLesson = code_lesson.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            vhcQueryFilter.code_lesson = { $regex: safeLesson, $options: 'i' };
           }
         }
 
