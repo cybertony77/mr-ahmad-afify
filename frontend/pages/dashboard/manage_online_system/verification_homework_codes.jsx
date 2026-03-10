@@ -580,6 +580,7 @@ export default function VerificationHomeworkCodes() {
               <AttendanceLessonSelect
                 selectedLesson={filterLesson || null}
                 onLessonChange={(lesson) => {
+                  // Empty value -> no filter, "All" -> filter codes with code_lesson === "All"
                   if (lesson === '') {
                     setFilterLesson(null);
                   } else {

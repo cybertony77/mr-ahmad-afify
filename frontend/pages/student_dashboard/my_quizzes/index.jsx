@@ -357,6 +357,13 @@ export default function MyQuizzes() {
   // Track which quizzes have already had deadline penalties applied (to prevent duplicate scoring)
   const deadlinePenaltiesAppliedRef = useRef(new Set());
   
+  /**
+   * DEADLINE DB/SCORE LOGIC DISABLED:
+   * This effect was writing quiz deadline penalties into the DB and
+   * recalculating scores when deadlines passed. It is now commented out
+   * so deadlines only change the UI badges/text and do NOT touch DB/scoring.
+   */
+  /*
   // Check deadlines and update student lessons if needed
   useEffect(() => {
     console.log(`[DEADLINE] useEffect triggered - profile?.id: ${profile?.id}, quizzes.length: ${quizzes.length}, profile?.lessons:`, profile?.lessons);
@@ -605,6 +612,7 @@ export default function MyQuizzes() {
 
     checkDeadlines();
   }, [profile?.id, profile?.lessons, quizzes, completedQuizzes, isScoringEnabled, queryClient]); // Updated deps for lessons
+  */
 
   if (isLoading) {
     return (
