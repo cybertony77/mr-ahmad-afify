@@ -1,5 +1,6 @@
 import "@/styles/globals.css";
 import '@mantine/core/styles.css';
+import '@mantine/carousel/styles.css';
 import { MantineProvider } from '@mantine/core';
 import { useRouter } from "next/router";
 import { useEffect, useState, useMemo } from "react";

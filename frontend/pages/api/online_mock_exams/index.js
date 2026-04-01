@@ -33,6 +33,36 @@ const envConfig = loadEnvConfig();
 const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/topphysics';
 const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'mr-george-magdy';
 
+function getQuestionPicturesFromPayload(question = {}) {
+  const pictures = [];
+  pictures[0] = question.question_picture || null;
+  Object.keys(question)
+    .filter((key) => /^question_picture_\d+$/.test(key))
+    .sort((a, b) => Number(a.split('_').pop()) - Number(b.split('_').pop()))
+    .forEach((key) => {
+      const idx = Number(key.split('_').pop()) - 1;
+      if (idx >= 1) pictures[idx] = question[key] || null;
+    });
+  return pictures.filter((pic) => !!pic);
+}
+
+function normalizeQuestionPictures(question = {}) {
+  const pictures = [question.question_picture || null];
+  Object.keys(question)
+    .filter((key) => /^question_picture_\d+$/.test(key))
+    .sort((a, b) => Number(a.split('_').pop()) - Number(b.split('_').pop()))
+    .forEach((key) => {
+      const idx = Number(key.split('_').pop()) - 1;
+      if (idx >= 1) pictures[idx] = question[key] || null;
+    });
+
+  const normalized = { question_picture: pictures[0] || null };
+  for (let i = 1; i < pictures.length; i++) {
+    normalized[`question_picture_${i + 1}`] = pictures[i] || null;
+  }
+  return normalized;
+}
+
 export default async function handler(req, res) {
   let client;
   try {
@@ -91,7 +121,7 @@ export default async function handler(req, res) {
         for (let i = 0; i < questions.length; i++) {
           const q = questions[i];
           const hasQuestionText = q.question_text && q.question_text.trim() !== '';
-          const hasQuestionImage = q.question_picture;
+          const hasQuestionImage = getQuestionPicturesFromPayload(q).length > 0;
           if (!hasQuestionText && !hasQuestionImage) {
             return res.status(400).json({ error: `❌ Question ${i + 1}: Question must have at least question text or image (or both)` });
           }
@@ -183,7 +213,7 @@ export default async function handler(req, res) {
           
           return {
             question_text: q.question_text || '',
-            question_picture: q.question_picture || null,
+            ...normalizeQuestionPictures(q),
             answers: q.answers,
             answer_texts: q.answer_texts || [],
             correct_answer: hasText && correctAnswerText 
@@ -242,7 +272,7 @@ export default async function handler(req, res) {
         for (let i = 0; i < questions.length; i++) {
           const q = questions[i];
           const hasQuestionText = q.question_text && q.question_text.trim() !== '';
-          const hasQuestionImage = q.question_picture;
+          const hasQuestionImage = getQuestionPicturesFromPayload(q).length > 0;
           if (!hasQuestionText && !hasQuestionImage) {
             return res.status(400).json({ error: `❌ Question ${i + 1}: Question must have at least question text or image (or both)` });
           }
@@ -340,7 +370,7 @@ export default async function handler(req, res) {
           
           return {
             question_text: q.question_text || '',
-            question_picture: q.question_picture || null,
+            ...normalizeQuestionPictures(q),
             answers: q.answers,
             answer_texts: q.answer_texts || [],
             correct_answer: hasText && correctAnswerText 

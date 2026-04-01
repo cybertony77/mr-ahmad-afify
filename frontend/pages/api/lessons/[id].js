@@ -58,11 +58,20 @@ export default async function handler(req, res) {
 
     if (req.method === 'PUT') {
       // Update lesson
-      const { name } = req.body;
+      const { name, category } = req.body;
 
       if (!name || !name.trim()) {
         return res.status(400).json({ error: 'Lesson name is required' });
       }
+
+      const categoryNorm =
+        category === undefined
+          ? undefined
+          : category == null ||
+              category === '' ||
+              String(category).trim() === ''
+            ? null
+            : String(category).trim();
 
       // Check if lesson exists
       const lesson = await db.collection('lessons').findOne({ id: lessonId });
@@ -82,10 +91,15 @@ export default async function handler(req, res) {
       const oldName = lesson.name;
       const newName = name.trim();
 
+      const $set = { name: newName };
+      if (categoryNorm !== undefined) {
+        $set.category = categoryNorm;
+      }
+
       // Update lesson in lessons collection
       await db.collection('lessons').updateOne(
         { id: lessonId },
-        { $set: { name: newName } }
+        { $set }
       );
 
       // Update lesson name in all students' lessons object if name changed

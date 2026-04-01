@@ -144,6 +144,9 @@ export default function EditQuiz() {
           ? quizData.questions.map(q => ({
               question_text: q.question_text || '',
               question_picture: q.question_picture || null,
+              ...Object.keys(q)
+                .filter((key) => /^question_picture_\d+$/.test(key))
+                .reduce((acc, key) => ({ ...acc, [key]: q[key] || null }), {}),
               answers: q.answers && q.answers.length > 0 ? q.answers : ['A', 'B'],
               answer_texts: q.answer_texts && q.answer_texts.length > 0 ? q.answer_texts : (q.answers ? q.answers.map(() => '') : ['', '']),
               correct_answer: q.correct_answer || '',
@@ -165,23 +168,33 @@ export default function EditQuiz() {
 
       // Load image URLs for existing images
       const loadImageUrls = async () => {
-        const urlPromises = quizData.questions?.map(async (q, idx) => {
-          if (q.question_picture) {
-            setLoadingImages(prev => ({ ...prev, [idx]: true }));
-            try {
-              const response = await apiClient.get(`/api/quizzes/image?public_id=${q.question_picture}`);
-              if (response.data?.url) {
-                setImageUrls(prev => ({ ...prev, [idx]: response.data.url }));
-              }
-            } catch (err) {
-              console.error(`Failed to load image for question ${idx}:`, err);
-            } finally {
-              setLoadingImages(prev => {
-                const newLoading = { ...prev };
-                delete newLoading[idx];
-                return newLoading;
-              });
+        const urlPromises = quizData.questions?.flatMap((q, idx) => {
+          const pictures = [];
+          pictures[0] = q?.question_picture || null;
+          Object.keys(q || {})
+            .filter((key) => /^question_picture_\d+$/.test(key))
+            .sort((a, b) => Number(a.split('_').pop()) - Number(b.split('_').pop()))
+            .forEach((key) => {
+              const pictureIndex = Number(key.split('_').pop()) - 1;
+              if (pictureIndex >= 1) pictures[pictureIndex] = q[key] || null;
+            });
+
+          return pictures.map((publicId, imageIdx) => ({ publicId, imageKey: `${idx}_${imageIdx}` }));
+        }).filter((item) => !!item.publicId).map(async ({ publicId, imageKey }) => {
+          setLoadingImages(prev => ({ ...prev, [imageKey]: true }));
+          try {
+            const response = await apiClient.get(`/api/quizzes/image?public_id=${publicId}`);
+            if (response.data?.url) {
+              setImageUrls(prev => ({ ...prev, [imageKey]: response.data.url }));
             }
+          } catch (err) {
+            console.error(`Failed to load image ${imageKey}:`, err);
+          } finally {
+            setLoadingImages(prev => {
+              const newLoading = { ...prev };
+              delete newLoading[imageKey];
+              return newLoading;
+            });
           }
         }) || [];
         await Promise.all(urlPromises);
@@ -206,27 +219,62 @@ export default function EditQuiz() {
     },
   });
 
+  const getQuestionPictures = (question) => {
+    if (!question || typeof question !== 'object') return [null];
+    const pictures = [];
+    pictures[0] = question.question_picture || null;
+    Object.keys(question)
+      .filter((key) => /^question_picture_\d+$/.test(key))
+      .sort((a, b) => Number(a.split('_').pop()) - Number(b.split('_').pop()))
+      .forEach((key) => {
+        const idx = Number(key.split('_').pop()) - 1;
+        if (idx >= 1) pictures[idx] = question[key] || null;
+      });
+    return pictures.length ? pictures.map((pic) => pic || null) : [null];
+  };
+
+  const buildQuestionPicturesPayload = (pictures) => {
+    const payload = { question_picture: pictures[0] || null };
+    for (let i = 1; i < pictures.length; i++) {
+      payload[`question_picture_${i + 1}`] = pictures[i] || null;
+    }
+    return payload;
+  };
+
+  const updateQuestionPictures = (questionIndex, pictures) => {
+    setFormData((prev) => {
+      const newQuestions = [...prev.questions];
+      const currentQuestion = { ...newQuestions[questionIndex] };
+      Object.keys(currentQuestion).forEach((key) => {
+        if (/^question_picture_\d+$/.test(key)) delete currentQuestion[key];
+      });
+      newQuestions[questionIndex] = { ...currentQuestion, ...buildQuestionPicturesPayload(pictures) };
+      return { ...prev, questions: newQuestions };
+    });
+  };
+
   // Handle image upload
-  const handleImageUpload = async (questionIndex, file) => {
+  const handleImageUpload = async (questionIndex, imageIndex, file) => {
     if (!file) return;
+    const imageKey = `${questionIndex}_${imageIndex}`;
 
     // Allowed image MIME types
     const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp', 'image/x-icon', 'image/vnd.microsoft.icon'];
     
     // Validate file type
     if (!file.type || !ALLOWED_MIME_TYPES.includes(file.type)) {
-      setErrors(prev => ({ ...prev, [`question_${questionIndex}_image`]: '❌ Invalid file type. Only image formats (JPEG/JPG, PNG, GIF, SVG, WEBP, ICO) are allowed.' }));
+      setErrors(prev => ({ ...prev, [`question_${questionIndex}_image_${imageIndex}`]: '❌ Invalid file type. Only image formats (JPEG/JPG, PNG, GIF, SVG, WEBP, ICO) are allowed.' }));
       return;
     }
 
     // Validate file size (10 MB)
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
     if (file.size > MAX_FILE_SIZE) {
-      setErrors(prev => ({ ...prev, [`question_${questionIndex}_image`]: '❌ Sorry, Max image size is 10 MB, Please try another picture' }));
+      setErrors(prev => ({ ...prev, [`question_${questionIndex}_image_${imageIndex}`]: '❌ Sorry, Max image size is 10 MB, Please try another picture' }));
       // Clear preview if exists
       setImagePreviews(prev => {
         const newPreviews = { ...prev };
-        delete newPreviews[questionIndex];
+        delete newPreviews[imageKey];
         return newPreviews;
       });
       return;
@@ -235,15 +283,15 @@ export default function EditQuiz() {
     // Create preview
     const reader = new FileReader();
     reader.onloadend = () => {
-      setImagePreviews(prev => ({ ...prev, [questionIndex]: reader.result }));
+      setImagePreviews(prev => ({ ...prev, [imageKey]: reader.result }));
     };
     reader.readAsDataURL(file);
 
     // Upload to Cloudinary
-    setUploadingImages(prev => ({ ...prev, [questionIndex]: true }));
+    setUploadingImages(prev => ({ ...prev, [imageKey]: true }));
     setErrors(prev => {
       const newErrors = { ...prev };
-      delete newErrors[`question_${questionIndex}_image`];
+      delete newErrors[`question_${questionIndex}_image_${imageIndex}`];
       return newErrors;
     });
     
@@ -263,19 +311,15 @@ export default function EditQuiz() {
 
       if (response.data.success && response.data.public_id) {
         const newPublicId = response.data.public_id;
-        setFormData(prev => {
-          const newQuestions = [...prev.questions];
-          newQuestions[questionIndex] = {
-            ...newQuestions[questionIndex],
-            question_picture: newPublicId
-          };
-          return { ...prev, questions: newQuestions };
-        });
+        const currentPictures = getQuestionPictures(formData.questions[questionIndex]);
+        const nextPictures = [...currentPictures];
+        nextPictures[imageIndex] = newPublicId;
+        updateQuestionPictures(questionIndex, nextPictures);
         // Fetch signed URL for the newly uploaded image
         try {
           const urlResponse = await apiClient.get(`/api/quizzes/image?public_id=${newPublicId}`);
           if (urlResponse.data?.url) {
-            setImageUrls(prev => ({ ...prev, [questionIndex]: urlResponse.data.url }));
+            setImageUrls(prev => ({ ...prev, [imageKey]: urlResponse.data.url }));
           }
         } catch (urlErr) {
           console.error('Failed to fetch signed URL for new image:', urlErr);
@@ -304,48 +348,56 @@ export default function EditQuiz() {
         errorMessage = `❌ ${err.message}`;
       }
       
-      setErrors(prev => ({ ...prev, [`question_${questionIndex}_image`]: errorMessage }));
+      setErrors(prev => ({ ...prev, [`question_${questionIndex}_image_${imageIndex}`]: errorMessage }));
       setImagePreviews(prev => {
         const newPreviews = { ...prev };
-        delete newPreviews[questionIndex];
+        delete newPreviews[imageKey];
         return newPreviews;
       });
     } finally {
       setUploadingImages(prev => {
         const newLoading = { ...prev };
-        delete newLoading[questionIndex];
+        delete newLoading[imageKey];
         return newLoading;
       });
     }
   };
 
+  const addImageContainer = (questionIndex) => {
+    const currentPictures = getQuestionPictures(formData.questions[questionIndex]);
+    updateQuestionPictures(questionIndex, [...currentPictures, null]);
+  };
+
   // Handle remove image
-  const handleRemoveImage = (questionIndex) => {
-    setFormData(prev => {
-      const newQuestions = [...prev.questions];
-      newQuestions[questionIndex] = {
-        ...newQuestions[questionIndex],
-        question_picture: null
-      };
-      return { ...prev, questions: newQuestions };
-    });
+  const handleRemoveImage = (questionIndex, imageIndex) => {
+    const currentPictures = getQuestionPictures(formData.questions[questionIndex]);
+    const nextPictures = [...currentPictures];
+    nextPictures[imageIndex] = null;
+    updateQuestionPictures(questionIndex, nextPictures);
+    const imageKey = `${questionIndex}_${imageIndex}`;
     setImagePreviews(prev => {
       const newPreviews = { ...prev };
-      delete newPreviews[questionIndex];
+      delete newPreviews[imageKey];
       return newPreviews;
     });
     setImageUrls(prev => {
       const newUrls = { ...prev };
-      delete newUrls[questionIndex];
+      delete newUrls[imageKey];
       return newUrls;
     });
   };
 
+  const removeImageContainer = (questionIndex, imageIndex) => {
+    const currentPictures = getQuestionPictures(formData.questions[questionIndex]);
+    if (imageIndex === 0 || currentPictures.length <= 1) return;
+    updateQuestionPictures(questionIndex, currentPictures.filter((_, idx) => idx !== imageIndex));
+  };
+
   // Drag and drop handlers
-  const handleDragOver = (e, questionIndex) => {
+  const handleDragOver = (e, questionIndex, imageIndex) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragOverIndex(questionIndex);
+    setDragOverIndex(`${questionIndex}_${imageIndex}`);
   };
 
   const handleDragLeave = (e) => {
@@ -354,14 +406,14 @@ export default function EditQuiz() {
     setDragOverIndex(null);
   };
 
-  const handleDrop = (e, questionIndex) => {
+  const handleDrop = (e, questionIndex, imageIndex) => {
     e.preventDefault();
     e.stopPropagation();
     setDragOverIndex(null);
     
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      handleImageUpload(questionIndex, file);
+      handleImageUpload(questionIndex, imageIndex, file);
     }
   };
 
@@ -596,7 +648,7 @@ export default function EditQuiz() {
       } else {
         formData.questions.forEach((q, qIdx) => {
           const hasQuestionText = q.question_text && q.question_text.trim() !== '';
-          const hasQuestionImage = q.question_picture;
+          const hasQuestionImage = getQuestionPictures(q).some((pic) => !!pic);
           if (!hasQuestionText && !hasQuestionImage) {
             newErrors[`question_${qIdx}_text_or_image`] = '❌ Question must have at least question text or image (or both)';
           }
@@ -703,7 +755,7 @@ export default function EditQuiz() {
     } else if (formData.questions && Array.isArray(formData.questions)) {
       submitData.questions = formData.questions.map(q => ({
         question_text: q.question_text || '',
-        question_picture: q.question_picture,
+        ...buildQuestionPicturesPayload(getQuestionPictures(q)),
         answers: q.answers,
         answer_texts: q.answer_texts || [],
         correct_answer: q.correct_answer,
@@ -1321,212 +1373,46 @@ export default function EditQuiz() {
                   )}
                 </div>
 
-                {/* Question Image Upload (first) */}
+                {/* Question Image Uploads */}
                 <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', textAlign: 'left' }}>
-                    Question Image
-                  </label>
                   <div style={{ fontSize: '0.875rem', color: '#6c757d', marginBottom: '8px' }}>
                     Max size: 10 MB
                   </div>
-                  {question.question_picture || imagePreviews[qIdx] ? (
-                    <div
-                      className="question-image-container"
-                      style={{
-                        position: 'relative',
-                        width: '100%',
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      {loadingImages[qIdx] ? (
-                        <div style={{
-                          width: '100%',
-                          padding: '40px',
-                          textAlign: 'center',
-                          color: '#6c757d'
-                        }}>
-                          Loading image...
+                  {getQuestionPictures(question).map((questionImage, imageIdx) => {
+                    const imageKey = `${qIdx}_${imageIdx}`;
+                    const hasImage = !!questionImage || !!imagePreviews[imageKey] || !!imageUrls[imageKey];
+                    return (
+                      <div key={imageKey} style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', textAlign: 'left' }}>
+                          {imageIdx === 0 ? 'Question Image' : `Question Image ${imageIdx + 1}`}
+                        </label>
+                        {hasImage ? (
+                          <div className="question-image-container" style={{ position: 'relative', width: '100%', transition: 'all 0.3s ease' }}>
+                            {loadingImages[imageKey] ? <div style={{ width: '100%', padding: '40px', textAlign: 'center', color: '#6c757d' }}>Loading image...</div> : <ZoomableImage src={imagePreviews[imageKey] || imageUrls[imageKey] || ''} alt="Question" />}
+                            <div className="question-image-trash" onClick={(e) => { e.stopPropagation(); handleRemoveImage(qIdx, imageIdx); }} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 72, height: 72, borderRadius: '50%', background: '#dc3545', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.3s ease', zIndex: 100, cursor: 'pointer', pointerEvents: 'none' }}>
+                              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                            </div>
+                            {uploadingImages[imageKey] && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 64, height: 64, borderRadius: '50%', background: 'rgba(0, 0, 0, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}><div style={{ width: '40px', height: '40px', border: '4px solid rgba(255, 255, 255, 0.3)', borderTop: '4px solid white', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /></div>}
+                          </div>
+                        ) : (
+                          <div onDragOver={(e) => handleDragOver(e, qIdx, imageIdx)} onDragLeave={handleDragLeave} onDrop={(e) => handleDrop(e, qIdx, imageIdx)} style={{ border: `2px dashed ${dragOverIndex === imageKey ? '#1FA8DC' : '#e9ecef'}`, borderRadius: '12px', padding: '40px 20px', textAlign: 'center', backgroundColor: dragOverIndex === imageKey ? '#f0f8ff' : 'white', transition: 'all 0.3s ease', cursor: uploadingImages[imageKey] ? 'not-allowed' : 'pointer' }}>
+                            <div style={{ marginBottom: '16px' }}><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#1FA8DC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto', display: 'block' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></div>
+                            <p style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: '500', color: '#333' }}>Drag your file here</p>
+                            <p style={{ margin: '0 0 16px 0', fontSize: '0.875rem', color: '#6c757d' }}>or</p>
+                            <input type="file" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleImageUpload(qIdx, imageIdx, file); }} style={{ display: 'none' }} id={`question-image-${qIdx}-${imageIdx}`} disabled={uploadingImages[imageKey]} />
+                            <label htmlFor={`question-image-${qIdx}-${imageIdx}`} style={{ display: 'inline-block', padding: '12px 24px', backgroundColor: uploadingImages[imageKey] ? '#6c757d' : '#1FA8DC', color: 'white', borderRadius: '8px', cursor: uploadingImages[imageKey] ? 'not-allowed' : 'pointer', fontSize: '0.9rem', fontWeight: '600', opacity: uploadingImages[imageKey] ? 0.7 : 1, transition: 'all 0.2s ease' }}>
+                              {uploadingImages[imageKey] ? 'Uploading...' : 'Browse'}
+                            </label>
+                          </div>
+                        )}
+                        <div className="image-buttons-container" style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', width: '100%', marginTop: '8px' }}>
+                          {imageIdx > 0 && <button type="button" onClick={() => removeImageContainer(qIdx, imageIdx)} style={{ padding: '8px 16px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}><Image src="/trash2.svg" alt="Remove" width={18} height={18} style={{ display: 'inline-block' }} />Remove</button>}
+                          <button type="button" onClick={() => addImageContainer(qIdx)} style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}><Image src="/plus.svg" alt="Add" width={18} height={18} style={{ display: 'inline-block' }} />Add</button>
                         </div>
-                      ) : (
-                        <ZoomableImage
-                          src={imagePreviews[qIdx] || imageUrls[qIdx] || ''}
-                          alt="Question"
-                        />
-                      )}
-                      {/* Trash icon overlay - shown on hover */}
-                      <div
-                        className="question-image-trash"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveImage(qIdx);
-                        }}
-                        style={{
-                          position: 'absolute',
-                          top: '50%',
-                          left: '50%',
-                          transform: 'translate(-50%, -50%)',
-                          width: 72,
-                          height: 72,
-                          borderRadius: '50%',
-                          background: '#dc3545',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          opacity: 0,
-                          transition: 'opacity 0.3s ease',
-                          zIndex: 100,
-                          cursor: 'pointer',
-                          pointerEvents: 'none'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.opacity = '1';
-                          e.currentTarget.style.pointerEvents = 'auto';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.opacity = '0';
-                          e.currentTarget.style.pointerEvents = 'none';
-                        }}
-                        title="Click to remove image"
-                      >
-                        <svg
-                          width="32"
-                          height="32"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="white"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="3 6 5 6 21 6"></polyline>
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                          <line x1="10" y1="11" x2="10" y2="17"></line>
-                          <line x1="14" y1="11" x2="14" y2="17"></line>
-                        </svg>
+                        {errors[`question_${qIdx}_image_${imageIdx}`] && <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>{errors[`question_${qIdx}_image_${imageIdx}`]}</div>}
                       </div>
-                      {/* Uploading spinner overlay */}
-                      {uploadingImages[qIdx] && (
-                        <div
-                          style={{
-                            position: 'absolute',
-                            top: '50%',
-                            left: '50%',
-                            transform: 'translate(-50%, -50%)',
-                            width: 64,
-                            height: 64,
-                            borderRadius: '50%',
-                            background: 'rgba(0, 0, 0, 0.7)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 20
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: '40px',
-                              height: '40px',
-                              border: '4px solid rgba(255, 255, 255, 0.3)',
-                              borderTop: '4px solid white',
-                              borderRadius: '50%',
-                              animation: 'spin 1s linear infinite'
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div
-                      onDragOver={(e) => handleDragOver(e, qIdx)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDrop(e, qIdx)}
-                      style={{
-                        border: `2px dashed ${dragOverIndex === qIdx ? '#1FA8DC' : '#e9ecef'}`,
-                        borderRadius: '12px',
-                        padding: '40px 20px',
-                        textAlign: 'center',
-                        backgroundColor: dragOverIndex === qIdx ? '#f0f8ff' : 'white',
-                        transition: 'all 0.3s ease',
-                        cursor: uploadingImages[qIdx] ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      <div style={{ marginBottom: '16px' }}>
-                        <svg
-                          width="48"
-                          height="48"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="#1FA8DC"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          style={{ margin: '0 auto', display: 'block' }}
-                        >
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                          <polyline points="17 8 12 3 7 8"></polyline>
-                          <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                      </div>
-                      <p style={{ 
-                        margin: '0 0 12px 0', 
-                        fontSize: '1rem', 
-                        fontWeight: '500',
-                        color: '#333'
-                      }}>
-                        Drag your file here
-                      </p>
-                      <p style={{ 
-                        margin: '0 0 16px 0', 
-                        fontSize: '0.875rem', 
-                        color: '#6c757d'
-                      }}>
-                        or
-                      </p>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleImageUpload(qIdx, file);
-                        }}
-                        style={{ display: 'none' }}
-                        id={`question-image-${qIdx}`}
-                        disabled={uploadingImages[qIdx]}
-                      />
-                      <label
-                        htmlFor={`question-image-${qIdx}`}
-                        style={{
-                          display: 'inline-block',
-                          padding: '12px 24px',
-                          backgroundColor: uploadingImages[qIdx] ? '#6c757d' : '#1FA8DC',
-                          color: 'white',
-                          borderRadius: '8px',
-                          cursor: uploadingImages[qIdx] ? 'not-allowed' : 'pointer',
-                          fontSize: '0.9rem',
-                          fontWeight: '600',
-                          opacity: uploadingImages[qIdx] ? 0.7 : 1,
-                          transition: 'all 0.2s ease'
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!uploadingImages[qIdx]) {
-                            e.target.style.backgroundColor = '#0d5a7a';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!uploadingImages[qIdx]) {
-                            e.target.style.backgroundColor = '#1FA8DC';
-                          }
-                        }}
-                      >
-                        {uploadingImages[qIdx] ? 'Uploading...' : 'Browse'}
-                      </label>
-                    </div>
-                  )}
-                  {errors[`question_${qIdx}_text_or_image`] && (
-                    <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
-                      {errors[`question_${qIdx}_text_or_image`]}
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
 
                 {/* Question Text */}
@@ -1617,7 +1503,7 @@ export default function EditQuiz() {
                             />
                           </div>
                           
-                          <div className="answer-buttons-container" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', width: '100%', marginTop: '8px' }}>
+                          <div className="answer-buttons-container" style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', width: '100%', marginTop: '8px' }}>
                             {hasTrashButton && (
                               <button
                                 type="button"
@@ -1866,6 +1752,16 @@ export default function EditQuiz() {
           .submit-buttons button {
             width: 100%;
           }
+          .answer-buttons-container button {
+            flex: 1 1 calc(50% - 4px) !important;
+            min-width: calc(50% - 4px) !important;
+            max-width: calc(50% - 4px) !important;
+          }
+          .image-buttons-container button {
+            flex: 1 1 calc(50% - 4px) !important;
+            min-width: calc(50% - 4px) !important;
+            max-width: calc(50% - 4px) !important;
+          }
           .answer-option-row {
             flex-direction: column !important;
             align-items: stretch !important;
@@ -1920,8 +1816,14 @@ export default function EditQuiz() {
           }
           .question-section > div:first-child {
             flex-direction: column !important;
-            align-items: flex-start !important;
+            align-items: stretch !important;
             gap: 12px !important;
+          }
+          .question-section > div:first-child button {
+            align-self: flex-end !important;
+            width: auto !important;
+            max-width: 100% !important;
+            flex: 0 1 auto !important;
           }
         }
         @media (max-width: 480px) {
@@ -1965,6 +1867,16 @@ export default function EditQuiz() {
             padding: 8px 10px !important;
             font-size: 0.8rem !important;
           }
+          .answer-buttons-container button {
+            flex: 1 1 calc(50% - 4px) !important;
+            min-width: calc(50% - 4px) !important;
+            max-width: calc(50% - 4px) !important;
+          }
+          .image-buttons-container button {
+            flex: 1 1 calc(50% - 4px) !important;
+            min-width: calc(50% - 4px) !important;
+            max-width: calc(50% - 4px) !important;
+          }
           button[onclick*="addQuestion"] {
             padding: 10px 14px !important;
             font-size: 0.9rem !important;
@@ -1984,6 +1896,16 @@ export default function EditQuiz() {
           input[type="text"], textarea, select {
             font-size: 0.85rem !important;
             padding: 8px 10px !important;
+          }
+          .answer-buttons-container button {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          .image-buttons-container button {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            max-width: 100% !important;
           }
         }
       `}</style>

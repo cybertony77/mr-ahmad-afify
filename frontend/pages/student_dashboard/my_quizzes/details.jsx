@@ -5,7 +5,8 @@ import Title from '../../../components/Title';
 import apiClient from '../../../lib/axios';
 import { useProfile } from '../../../lib/api/auth';
 import NeedHelp from '../../../components/NeedHelp';
-import ZoomableImage from '../../../components/ZoomableImage';
+import QuestionImagesCarousel from '../../../components/student/QuestionImagesCarousel';
+import { listQuestionPicturePublicIds } from '../../../lib/questionPictures';
 
 export default function QuizDetails() {
   const router = useRouter();
@@ -65,24 +66,22 @@ export default function QuizDetails() {
     if (!quiz || !quiz.questions) return;
 
     const fetchImages = async () => {
-      const imagePromises = {};
-      
+      const byPublicId = {};
       for (const question of quiz.questions) {
-        const imageField = question.question_image || question.question_picture;
-        if (imageField) {
+        const ids = listQuestionPicturePublicIds(question);
+        for (const publicId of ids) {
+          if (byPublicId[publicId]) continue;
           try {
-            const response = await apiClient.get(`/api/quizzes/image?public_id=${imageField}`);
-            if (response.data.url) {
-              // Use question_picture public_id as key (unique per question)
-              imagePromises[imageField] = response.data.url;
+            const response = await apiClient.get(`/api/quizzes/image?public_id=${encodeURIComponent(publicId)}`);
+            if (response.data?.url) {
+              byPublicId[publicId] = response.data.url;
             }
           } catch (err) {
-            console.error(`Error fetching image for question: ${question.question}`, err);
+            console.error('Error fetching quiz question image:', err);
           }
         }
       }
-      
-      setQuestionImages(imagePromises);
+      setQuestionImages(byPublicId);
     };
 
     fetchImages();
@@ -443,14 +442,11 @@ export default function QuizDetails() {
                     </div>
                     
                     {/* Question Image (if exists) */}
-                    {(question.question_image || question.question_picture) && questionImages[question.question_image || question.question_picture] && (
-                      <div style={{ marginBottom: '16px' }}>
-                        <ZoomableImage
-                          src={questionImages[question.question_image || question.question_picture]}
-                          alt="Question"
-                        />
-                      </div>
-                    )}
+                    <QuestionImagesCarousel
+                      question={question}
+                      imageUrls={questionImages}
+                      instanceKey={`quiz-details-${id}-q-${idx}`}
+                    />
 
                     {/* Question Text (if exists) */}
                     {question.question_text && question.question_text.trim() !== '' && (

@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { IconZoomIn, IconZoomOut, IconX } from '@tabler/icons-react';
 import { Image } from '@mantine/core';
 
-export default function ZoomableImage({ src, alt = 'Question Image', style = {} }) {
+export default function ZoomableImage({ src, alt = 'Question Image', style = {}, onImageLoad }) {
   const [zoom, setZoom] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -13,6 +14,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
   const containerRef = useRef(null);
   const controlsRef = useRef(null);
   const fullscreenContainerRef = useRef(null);
+  const [mounted, setMounted] = useState(false);
 
   const minZoom = 0.5;
   const maxZoom = 3;
@@ -98,6 +100,20 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
       setPosition({ x: 0, y: 0 });
     }
   }, [zoom]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || typeof document === 'undefined') return;
+    if (!isFullscreen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isFullscreen, mounted]);
 
   if (!src) return null;
 
@@ -330,12 +346,15 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
               height: 'auto'
             }}
             draggable={false}
+            onLoad={onImageLoad}
           />
         </div>
       </div>
 
-      {/* Fullscreen Modal */}
-      {isFullscreen && (
+      {/* Fullscreen: portal to body so position:fixed is not trapped by carousel transform */}
+      {mounted &&
+        isFullscreen &&
+        createPortal(
         <div
           style={{
             position: 'fixed',
@@ -544,8 +563,9 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
               />
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+        )}
 
       <style jsx>{`
         .zoom-controls-bar button:hover:not(:disabled) {

@@ -1,100 +1,97 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import formidable from 'formidable';
-import fs from 'fs';
-import path from 'path';
+import { createReadStream, unlinkSync } from 'fs';
+import { assertR2Config, getR2Config } from '../../../lib/r2Server';
 
 export const config = {
   api: { bodyParser: false },
 };
 
-function loadEnvConfig() {
-  try {
-    const envPath = path.join(process.cwd(), '..', 'env.config');
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    const envVars = {};
-
-    envContent.split('\n').forEach(line => {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#')) {
-        const index = trimmed.indexOf('=');
-        if (index !== -1) {
-          const key = trimmed.substring(0, index).trim();
-          let value = trimmed.substring(index + 1).trim();
-          value = value.replace(/^"|"$/g, '');
-          envVars[key] = value;
-        }
-      }
-    });
-
-    return envVars;
-  } catch (error) {
-    console.log('Could not read env.config, using process.env as fallback');
-    return {};
-  }
-}
-
-const envConfig = loadEnvConfig();
-const accountId = envConfig.CLOUDFLARE_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID;
-const accessKeyId = envConfig.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY_ID;
-const secretAccessKey = envConfig.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_ACCESS_KEY;
-const bucketName = envConfig.R2_BUCKET_NAME || process.env.R2_BUCKET_NAME;
-
-const client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-  credentials: { accessKeyId, secretAccessKey },
-  forcePathStyle: true,
-});
-
-function parseForm(req) {
-  return new Promise((resolve, reject) => {
-    const form = formidable({
-      maxFileSize: 5 * 1024 * 1024 * 1024, // 5GB
-    });
-    form.parse(req, (err, fields, files) => {
-      if (err) return reject(err);
-      resolve({ fields, files });
-    });
-  });
-}
-
+/**
+ * Same-origin upload → server → R2 (no browser CORS to R2).
+ * Uses multipart streaming so large videos need not fit in RAM.
+ */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  let cfg;
   try {
-    const { fields, files } = await parseForm(req);
+    cfg = getR2Config();
+    assertR2Config(cfg);
+  } catch (e) {
+    return res.status(500).json({ error: 'R2 configuration is missing' });
+  }
 
-    // formidable v3 wraps files in arrays
+  const client = new S3Client({
+    region: 'auto',
+    endpoint: `https://${cfg.accountId}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
+    forcePathStyle: true,
+  });
+
+  let tempPath = null;
+
+  try {
+    const { fields, files } = await new Promise((resolve, reject) => {
+      const form = formidable({
+        maxFileSize: 5 * 1024 * 1024 * 1024, // 5GB
+      });
+      form.parse(req, (err, f, filez) => {
+        if (err) return reject(err);
+        resolve({ fields: f, files: filez });
+      });
+    });
+
     const file = Array.isArray(files.file) ? files.file[0] : files.file;
     if (!file) {
       return res.status(400).json({ error: 'No file provided' });
     }
 
-    // Get the R2 key from the form fields
+    tempPath = file.filepath;
+
     const key = Array.isArray(fields.key) ? fields.key[0] : fields.key;
     if (!key) {
+      try {
+        unlinkSync(tempPath);
+      } catch {
+        /* ignore */
+      }
+      tempPath = null;
       return res.status(400).json({ error: 'key field is required' });
     }
 
-    const buffer = fs.readFileSync(file.filepath);
+    const contentType = file.mimetype || 'application/octet-stream';
+    const bodyStream = createReadStream(tempPath);
 
-    const command = new PutObjectCommand({
-      Bucket: bucketName,
-      Key: key,
-      Body: buffer,
-      ContentType: file.mimetype || 'application/octet-stream',
+    const upload = new Upload({
+      client,
+      params: {
+        Bucket: cfg.bucketName,
+        Key: key,
+        Body: bodyStream,
+        ContentType: contentType,
+      },
+      queueSize: 4,
+      partSize: 10 * 1024 * 1024, // 10 MiB parts (multipart for large files)
+      leavePartsOnError: false,
     });
 
-    await client.send(command);
-
-    // Clean up the temp file
-    fs.unlinkSync(file.filepath);
+    await upload.done();
 
     res.json({ success: true, key });
   } catch (error) {
     console.error('R2 proxy upload error:', error);
     res.status(500).json({ error: 'Upload failed', details: error.message });
+  } finally {
+    if (tempPath) {
+      try {
+        unlinkSync(tempPath);
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }

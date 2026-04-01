@@ -69,50 +69,64 @@ export default function VideoInput({
     setUploadProgress(0);
 
     try {
-      // Step 1: Get the R2 key from our API
+      // Step 1: Key + presigned PUT URL from our API (also applies bucket CORS when possible)
       const { data } = await axios.post('/api/upload/r2-signed-url', {
         fileName: file.name,
-        contentType: file.type,
+        contentType: file.type || 'application/octet-stream',
       });
 
-      const { key } = data;
+      const { signedUrl, key, contentType: signedContentType } = data;
+      const putContentType = signedContentType || file.type || 'application/octet-stream';
 
-      // Step 2: Upload via proxy API using FormData (same-origin, no CORS issues).
-      // formidable on the server parses the file and uploads it to R2.
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('key', key);
+      const runXhr = (opts) =>
+        new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhrRef.current = xhr;
 
-      await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhrRef.current = xhr;
+          xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) {
+              const percent = Math.round((event.loaded / event.total) * 100);
+              setUploadProgress(percent);
+            }
+          });
 
-        xhr.upload.addEventListener('progress', (event) => {
-          if (event.lengthComputable) {
-            const percent = Math.round((event.loaded / event.total) * 100);
-            setUploadProgress(percent);
-          }
+          xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve();
+            else reject(new Error(opts.label + xhr.status));
+          });
+
+          xhr.addEventListener('error', () => reject(new Error(opts.label + 'network')));
+          xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+
+          opts.openSend(xhr);
         });
 
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
-          } else {
-            reject(new Error(`Upload failed with status ${xhr.status}`));
-          }
+      // Step 2a: Try browser → R2 direct PUT (fast; needs bucket CORS)
+      // Step 2b: If that fails (CORS, etc.), same-origin POST → our API → R2 (no CORS to R2)
+      try {
+        await runXhr({
+          label: 'direct:',
+          openSend: (xhr) => {
+            xhr.open('PUT', signedUrl);
+            xhr.setRequestHeader('Content-Type', putContentType);
+            xhr.send(file);
+          },
         });
+      } catch (directErr) {
+        if (directErr.message === 'Upload cancelled') throw directErr;
 
-        xhr.addEventListener('error', () => {
-          reject(new Error('Upload failed'));
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('key', key);
+
+        await runXhr({
+          label: 'proxy:',
+          openSend: (xhr) => {
+            xhr.open('POST', '/api/upload/r2-proxy-upload');
+            xhr.send(formData);
+          },
         });
-
-        xhr.addEventListener('abort', () => {
-          reject(new Error('Upload cancelled'));
-        });
-
-        xhr.open('POST', '/api/upload/r2-proxy-upload');
-        xhr.send(formData);
-      });
+      }
 
       // Step 3: Success - save the R2 key
       setUploadStatus('done');

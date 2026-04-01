@@ -3,7 +3,8 @@ import { useRouter } from "next/router";
 import Image from 'next/image';
 import apiClient from '../../../lib/axios';
 import { useProfile } from '../../../lib/api/auth';
-import ZoomableImage from '../../../components/ZoomableImage';
+import QuestionImagesCarousel from '../../../components/student/QuestionImagesCarousel';
+import { listQuestionPicturePublicIds } from '../../../lib/questionPictures';
 
 export default function MockExamStart() {
   const router = useRouter();
@@ -218,19 +219,18 @@ export default function MockExamStart() {
           // Display questions (shuffled or original)
           setQuestions(shuffledQuestions);
           
-          // Load image URLs - map by question_picture public_id (unique per question)
-          const urlPromises = shuffledQuestions.map(async (q, index) => {
-            if (q.question_picture) {
-              try {
-                const imgResponse = await apiClient.get(`/api/online_mock_exams/image?public_id=${q.question_picture}`);
-                if (imgResponse.data?.url) {
-                  // Use question_picture public_id as key (unique per question)
-                  const key = q.question_picture;
-                  setImageUrls(prev => ({ ...prev, [key]: imgResponse.data.url }));
-                }
-              } catch (err) {
-                console.error(`Failed to load image for question:`, err);
+          const publicIdSet = new Set();
+          shuffledQuestions.forEach((q) => {
+            listQuestionPicturePublicIds(q).forEach((pid) => publicIdSet.add(pid));
+          });
+          const urlPromises = [...publicIdSet].map(async (publicId) => {
+            try {
+              const imgResponse = await apiClient.get(`/api/online_mock_exams/image?public_id=${encodeURIComponent(publicId)}`);
+              if (imgResponse.data?.url) {
+                setImageUrls((prev) => ({ ...prev, [publicId]: imgResponse.data.url }));
               }
+            } catch (err) {
+              console.error('Failed to load mock exam question image:', err);
             }
           });
           await Promise.all(urlPromises);
@@ -920,7 +920,7 @@ export default function MockExamStart() {
         flex: 1,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "center",
+        justifyContent: "flex-start",
         alignItems: "center",
         width: "100%"
       }}>
@@ -929,7 +929,7 @@ export default function MockExamStart() {
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center",
+          justifyContent: "flex-start",
           padding: "20px 0",
           overflow: "auto",
           maxWidth: "900px",
@@ -967,16 +967,11 @@ export default function MockExamStart() {
             </span>
           </div>
           
-          {/* Question Image (if exists) */}
-          {currentQuestion.question_picture && imageUrls[currentQuestion.question_picture] && (
-            <div style={{ marginBottom: "24px" }}>
-              <ZoomableImage
-                key={`question-${currentQuestionIndex}-${currentQuestion.question_picture}`}
-                src={imageUrls[currentQuestion.question_picture]}
-                alt="Question Image"
-              />
-            </div>
-          )}
+          <QuestionImagesCarousel
+            question={currentQuestion}
+            imageUrls={imageUrls}
+            instanceKey={`mock-${id}-q-${currentQuestionIndex}`}
+          />
 
           {/* Question Text (if exists) */}
           {currentQuestion.question_text && currentQuestion.question_text.trim() !== '' && (

@@ -1,31 +1,88 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../lib/axios';
+import styles from './AttendancelessonSelect.module.css';
 
-export default function AttendanceLessonSelect({ 
-  selectedLesson, 
-  onLessonChange, 
-  required = false, 
-  isOpen, 
-  onToggle, 
-  onClose, 
+/** Display order: SAT → EST → ACT → any other categories (A–Z) → All (last). */
+const PRIMARY_ORDER = ['SAT', 'EST', 'ACT'];
+
+function sortCategoryKeys(keys) {
+  const rank = (k) => {
+    if (k === 'All') return { group: 2, sub: 0 };
+    const pi = PRIMARY_ORDER.indexOf(k);
+    if (pi !== -1) return { group: 0, sub: pi };
+    return { group: 1, sub: k };
+  };
+
+  return [...keys].sort((a, b) => {
+    const ra = rank(a);
+    const rb = rank(b);
+    if (ra.group !== rb.group) return ra.group - rb.group;
+    if (ra.group === 0) return ra.sub - rb.sub;
+    if (ra.group === 1) {
+      return String(ra.sub).localeCompare(String(rb.sub), undefined, {
+        sensitivity: 'base',
+      });
+    }
+    return 0;
+  });
+}
+
+function groupLessonsByCategory(lessonRecords) {
+  const byCat = new Map();
+  const uncategorized = [];
+
+  for (const lesson of lessonRecords) {
+    const name = lesson?.name;
+    if (!name) continue;
+    const c = lesson.category;
+    const key =
+      c == null || String(c).trim() === '' ? null : String(c).trim();
+    if (key === null) {
+      uncategorized.push(name);
+    } else {
+      if (!byCat.has(key)) byCat.set(key, []);
+      byCat.get(key).push(name);
+    }
+  }
+
+  for (const arr of byCat.values()) {
+    arr.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }
+  uncategorized.sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  );
+
+  const orderedKeys = sortCategoryKeys([...byCat.keys()]);
+  return { orderedKeys, byCat, uncategorized };
+}
+
+export default function AttendanceLessonSelect({
+  selectedLesson,
+  onLessonChange,
+  required: _required = false,
+  isOpen,
+  onToggle,
+  onClose,
   placeholder = 'Select Attendance Lesson',
-  includeAllOption = false
+  includeAllOption = false,
 }) {
-  // Fetch lessons from database
   const { data: lessonsResponse, isLoading: lessonsLoading } = useQuery({
     queryKey: ['lessons'],
     queryFn: async () => {
       const response = await apiClient.get('/api/lessons');
       return response.data.lessons || [];
     },
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    refetchOnWindowFocus: false
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
-  const lessons = lessonsResponse?.map(lesson => lesson.name) || [];
+  const lessonRecords = lessonsResponse || [];
+  const { orderedKeys, byCat, uncategorized } = useMemo(
+    () => groupLessonsByCategory(lessonRecords),
+    [lessonRecords]
+  );
 
-  // Handle legacy props (value, onChange) for backward compatibility
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const actualIsOpen = isOpen !== undefined ? isOpen : internalIsOpen;
@@ -53,120 +110,108 @@ export default function AttendanceLessonSelect({
     actualOnClose();
   };
 
+  const triggerLabel =
+    selectedLesson && selectedLesson !== 'n/a' ? selectedLesson : placeholder;
+  const hasSelection = Boolean(
+    selectedLesson && selectedLesson !== 'n/a' && selectedLesson !== ''
+  );
+
+  const lessonButton = (lessonName) => {
+    const isSelected = selectedLesson === lessonName;
+    return (
+      <button
+        key={lessonName}
+        type="button"
+        className={`${styles.lessonRow} ${isSelected ? styles.lessonRowSelected : ''}`}
+        onClick={() => handleLessonSelect(lessonName)}
+      >
+        {lessonName}
+      </button>
+    );
+  };
+
+  const categorySection = (label, muted, lessonNames) => (
+    <>
+      <div
+        className={`${styles.categoryLabel} ${muted ? styles.categoryLabelMuted : ''}`}
+      >
+        {label}
+      </div>
+      <div className={styles.lessonList}>{lessonNames.map((n) => lessonButton(n))}</div>
+    </>
+  );
+
+  const hasTree = orderedKeys.length > 0 || uncategorized.length > 0;
+
   return (
     <div ref={dropdownRef} style={{ position: 'relative', width: '100%' }}>
       <div
-        style={{
-          padding: '14px 16px',
-          border: actualIsOpen ? '2px solid #1FA8DC' : '2px solid #e9ecef',
-          borderRadius: '10px',
-          cursor: 'pointer',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          color: selectedLesson ? '#1FA8DC' : '#adb5bd',
-          backgroundColor: selectedLesson ? '#f0f8ff' : '#ffffff',
-          fontWeight: selectedLesson ? '600' : '400',
-          fontSize: '1rem',
-          transition: 'all 0.3s ease',
-          boxShadow: actualIsOpen ? '0 0 0 3px rgba(31, 168, 220, 0.1)' : 'none'
-        }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={actualIsOpen}
+        aria-haspopup="listbox"
+        className={`${styles.trigger} ${actualIsOpen ? styles.triggerOpen : ''} ${hasSelection ? styles.triggerHasValue : ''}`}
         onClick={actualOnToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            actualOnToggle();
+          }
+        }}
       >
-        <span>{selectedLesson && selectedLesson !== 'n/a' ? selectedLesson : placeholder}</span>
+        <span>{triggerLabel}</span>
       </div>
-      
 
-      
       {actualIsOpen && (
-        <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          right: 0,
-          backgroundColor: '#ffffff',
-          border: '2px solid #e9ecef',
-          borderRadius: '10px',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-          zIndex: 1000,
-          maxHeight: '200px',
-          overflowY: 'auto',
-          marginTop: '4px'
-        }}>
-          <div
-            style={{
-              padding: '12px 16px',
-              cursor: 'pointer',
-              borderBottom: '1px solid #f8f9fa',
-              transition: 'background-color 0.2s ease',
-              color: '#dc3545',
-              fontWeight: '500'
-            }}
+        <div className={styles.panel}>
+          <button
+            type="button"
+            className={`${styles.topActionBtn} ${styles.topAction} ${styles.topActionClear}`}
             onClick={() => handleLessonSelect('')}
-            onMouseEnter={(e) => e.target.style.backgroundColor = '#fff5f5'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = '#ffffff'}
           >
             ✕ Clear selection
-          </div>
+          </button>
+
           {includeAllOption && (
-            <div
-              style={{
-                padding: '12px 16px',
-                cursor: 'pointer',
-                borderBottom: '1px solid #f8f9fa',
-                transition: 'background-color 0.2s ease',
-                color: selectedLesson === 'All' ? '#1FA8DC' : '#000000',
-                backgroundColor: selectedLesson === 'All' ? '#f0f8ff' : '#ffffff',
-                fontWeight: selectedLesson === 'All' ? '600' : '400'
-              }}
+            <button
+              type="button"
+              className={`${styles.topActionBtn} ${styles.topAction} ${styles.topActionAll} ${selectedLesson === 'All' ? styles.topActionAllSelected : ''}`}
               onClick={() => handleLessonSelect('All')}
-              onMouseEnter={(e) => e.target.style.backgroundColor = selectedLesson === 'All' ? '#f0f8ff' : '#f8f9fa'}
-              onMouseLeave={(e) => e.target.style.backgroundColor = selectedLesson === 'All' ? '#f0f8ff' : '#ffffff'}
             >
               All
-            </div>
+            </button>
           )}
+
+          <div className={styles.panelDivider} />
+
           {lessonsLoading ? (
-            <div style={{
-              padding: '12px 16px',
-              textAlign: 'center',
-              color: '#666',
-              fontSize: '0.9rem'
-            }}>
-              Loading lessons...
-            </div>
-          ) : lessons.length === 0 ? (
-            <div style={{
-              padding: '12px 16px',
-              textAlign: 'center',
-              color: '#999',
-              fontSize: '0.9rem'
-            }}>
+            <div className={styles.emptyState}>Loading lessons…</div>
+          ) : !hasTree ? (
+            <div className={`${styles.emptyState} ${styles.emptyStateMuted}`}>
               No lessons available
             </div>
           ) : (
-            lessons.map((lesson) => (
-            <div
-              key={lesson}
-              style={{
-                padding: '12px 16px',
-                cursor: 'pointer',
-                borderBottom: '1px solid #f8f9fa',
-                transition: 'background-color 0.2s ease',
-                color: selectedLesson === lesson ? '#1FA8DC' : '#000000',
-                backgroundColor: selectedLesson === lesson ? '#f0f8ff' : '#ffffff',
-                fontWeight: selectedLesson === lesson ? '600' : '400'
-              }}
-              onClick={() => handleLessonSelect(lesson)}
-              onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
-              onMouseLeave={(e) => e.target.style.backgroundColor = '#ffffff'}
-            >
-              {lesson}
-            </div>
-            ))
+            <>
+              {orderedKeys.map((catKey, idx) => (
+                <div
+                  key={catKey}
+                  className={`${styles.categoryBlock} ${idx > 0 ? styles.categoryBlockSpaced : ''}`}
+                >
+                  {categorySection(catKey, false, byCat.get(catKey))}
+                </div>
+              ))}
+
+              {uncategorized.length > 0 && (
+                <div
+                  className={`${styles.categoryBlock} ${orderedKeys.length > 0 ? styles.categoryBlockSpaced : ''}`}
+                >
+                  {categorySection('Not Categorized', true, uncategorized)}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
     </div>
   );
-} 
+}

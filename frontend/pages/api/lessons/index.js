@@ -77,11 +77,18 @@ export default async function handler(req, res) {
 
     } else if (req.method === 'POST') {
       // Create new lesson
-      const { name } = req.body;
+      const { name, category } = req.body;
 
       if (!name || !name.trim()) {
         return res.status(400).json({ error: 'Lesson name is required' });
       }
+
+      const categoryNorm =
+        category == null ||
+        category === '' ||
+        String(category).trim() === ''
+          ? null
+          : String(category).trim();
 
       // Check if lesson already exists
       const existingLesson = await db.collection('lessons').findOne({ name: name.trim() });
@@ -96,7 +103,8 @@ export default async function handler(req, res) {
       const newLesson = {
         id: nextId,
         name: name.trim(),
-        createdAt: new Date()
+        createdAt: new Date(),
+        category: categoryNorm,
       };
 
       await db.collection('lessons').insertOne(newLesson);

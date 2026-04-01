@@ -1,72 +1,39 @@
-import { S3Client, PutBucketCorsCommand } from '@aws-sdk/client-s3';
-import fs from 'fs';
-import path from 'path';
+import { PutBucketCorsCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  assertR2Config,
+  buildR2CorsAllowedOrigins,
+  getR2Config,
+} from '../../../lib/r2Server';
 
-// Load environment variables from env.config
-function loadEnvConfig() {
-  try {
-    const envPath = path.join(process.cwd(), '..', 'env.config');
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    const envVars = {};
-    
-    envContent.split('\n').forEach(line => {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#')) {
-        const index = trimmed.indexOf('=');
-        if (index !== -1) {
-          const key = trimmed.substring(0, index).trim();
-          let value = trimmed.substring(index + 1).trim();
-          value = value.replace(/^"|"$/g, '');
-          envVars[key] = value;
-        }
-      }
-    });
-    
-    return envVars;
-  } catch (error) {
-    console.log('Could not read env.config, using process.env as fallback');
-    return {};
-  }
-}
-
+/**
+ * Manual CORS apply (same rules as auto-apply in r2-signed-url).
+ * POST /api/upload/r2-setup-cors — optional if presigned-url flow already ran.
+ *
+ * Optional env: R2_CORS_ORIGINS = comma-separated origins
+ */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const envConfig = loadEnvConfig();
+    const cfg = getR2Config();
+    assertR2Config(cfg);
 
-    const accountId = envConfig.CLOUDFLARE_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID;
-    const accessKeyId = envConfig.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = envConfig.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_ACCESS_KEY;
-    const bucketName = envConfig.R2_BUCKET_NAME || process.env.R2_BUCKET_NAME;
-
-    if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
-      return res.status(500).json({ error: 'R2 configuration is missing' });
-    }
+    const allowedOrigins = buildR2CorsAllowedOrigins(cfg.envConfig || {});
 
     const s3Client = new S3Client({
       region: 'auto',
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      endpoint: `https://${cfg.accountId}.r2.cloudflarestorage.com`,
       credentials: {
-        accessKeyId,
-        secretAccessKey,
+        accessKeyId: cfg.accessKeyId,
+        secretAccessKey: cfg.secretAccessKey,
       },
       forcePathStyle: true,
     });
 
-    const systemDomain = envConfig.SYSTEM_DOMAIN || process.env.SYSTEM_DOMAIN || '';
-
-    const allowedOrigins = ['http://localhost:3000'];
-    if (systemDomain) {
-      // Add the domain with and without trailing slash
-      const domain = systemDomain.replace(/\/+$/, '');
-      allowedOrigins.push(domain);
-    }
-
     const command = new PutBucketCorsCommand({
-      Bucket: bucketName,
+      Bucket: cfg.bucketName,
       CORSConfiguration: {
         CORSRules: [
           {
@@ -82,7 +49,12 @@ export default async function handler(req, res) {
 
     await s3Client.send(command);
 
-    res.json({ success: true, message: 'CORS configured successfully on R2 bucket' });
+    res.json({
+      success: true,
+      message:
+        'CORS applied to R2 bucket. Browser PUT uploads should work from these origins:',
+      allowedOrigins,
+    });
   } catch (error) {
     console.error('R2 CORS setup error:', error);
     res.status(500).json({ error: 'Failed to configure CORS', details: error.message });

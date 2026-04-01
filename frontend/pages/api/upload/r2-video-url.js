@@ -1,79 +1,61 @@
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import fs from 'fs';
-import path from 'path';
+import {
+  assertR2Config,
+  assertSafeObjectKey,
+  createR2S3ClientForGetPresign,
+  getR2Config,
+} from '../../../lib/r2Server';
 
-// Load environment variables from env.config
-function loadEnvConfig() {
-  try {
-    const envPath = path.join(process.cwd(), '..', 'env.config');
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    const envVars = {};
-    
-    envContent.split('\n').forEach(line => {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#')) {
-        const index = trimmed.indexOf('=');
-        if (index !== -1) {
-          const key = trimmed.substring(0, index).trim();
-          let value = trimmed.substring(index + 1).trim();
-          value = value.replace(/^"|"$/g, '');
-          envVars[key] = value;
-        }
-      }
-    });
-    
-    return envVars;
-  } catch (error) {
-    console.log('Could not read env.config, using process.env as fallback');
-    return {};
+const PRESIGN_GET_EXPIRES_SEC = 4 * 60 * 60; // 4 hours — aligned with PUT presign TTL
+
+function getKeyFromRequest(req) {
+  if (req.method === 'GET') {
+    const raw = req.query.key;
+    if (Array.isArray(raw)) return raw[0];
+    return raw;
   }
+  return req.body?.key;
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
+  if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const envConfig = loadEnvConfig();
+    const cfg = getR2Config();
+    assertR2Config(cfg);
 
-    const accountId = envConfig.CLOUDFLARE_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID;
-    const accessKeyId = envConfig.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = envConfig.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_ACCESS_KEY;
-    const bucketName = envConfig.R2_BUCKET_NAME || process.env.R2_BUCKET_NAME;
-
-    if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
-      return res.status(500).json({ error: 'R2 configuration is missing' });
+    let key;
+    try {
+      key = getKeyFromRequest(req);
+      assertSafeObjectKey(key);
+    } catch (e) {
+      return res.status(e.statusCode || 400).json({ error: e.message });
     }
 
-    const { key } = req.body;
-
-    if (!key) {
-      return res.status(400).json({ error: 'key is required' });
-    }
-
-    const s3Client = new S3Client({
-      region: 'auto',
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
-      forcePathStyle: true,
-    });
+    const s3Client = createR2S3ClientForGetPresign(cfg);
 
     const command = new GetObjectCommand({
-      Bucket: bucketName,
+      Bucket: cfg.bucketName,
       Key: key,
     });
 
-    // Generate signed URL valid for 4 hours
-    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 14400 });
+    const signedUrl = await getSignedUrl(s3Client, command, {
+      expiresIn: PRESIGN_GET_EXPIRES_SEC,
+    });
 
-    res.json({ signedUrl });
+    res.json({
+      signedUrl,
+      expiresIn: PRESIGN_GET_EXPIRES_SEC,
+    });
   } catch (error) {
     console.error('R2 video URL error:', error);
-    res.status(500).json({ error: 'Failed to generate video URL', details: error.message });
+    const status = error.statusCode || 500;
+    res.status(status).json({
+      error: 'Failed to generate video URL',
+      details: error.message,
+    });
   }
 }

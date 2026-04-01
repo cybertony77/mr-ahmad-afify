@@ -1,9 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import apiClient from '../../lib/axios';
 import Title from '../../components/Title';
+import CourseSelect from '../../components/CourseSelect';
+import { InputWithButton } from './all_students';
+
+function normalizeLessonCategory(value) {
+  if (value == null || value === '' || String(value).trim() === '') {
+    return null;
+  }
+  return String(value).trim();
+}
 
 // API functions
 const lessonsAPI = {
@@ -33,13 +42,18 @@ export default function Lessons() {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
   const [newLessonName, setNewLessonName] = useState('');
+  const [newLessonCategory, setNewLessonCategory] = useState('');
   const [editingLesson, setEditingLesson] = useState(null);
   const [editName, setEditName] = useState('');
+  const [editCategory, setEditCategory] = useState('');
   const [error, setError] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
   const [lessonToDelete, setLessonToDelete] = useState(null);
   const [showAddSuccess, setShowAddSuccess] = useState(false);
   const [showEditSuccess, setShowEditSuccess] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
 
   // Fetch lessons
   const { data: lessons = [], isLoading, error: fetchError } = useQuery({
@@ -65,6 +79,7 @@ export default function Lessons() {
       setTimeout(() => {
         setShowAddForm(false);
         setNewLessonName('');
+        setNewLessonCategory('');
         setShowAddSuccess(false);
       }, 2000);
     },
@@ -83,6 +98,7 @@ export default function Lessons() {
       setTimeout(() => {
         setEditingLesson(null);
         setEditName('');
+        setEditCategory('');
         setShowEditSuccess(false);
       }, 2000);
     },
@@ -132,6 +148,36 @@ export default function Lessons() {
     }
   }, [showEditSuccess]);
 
+  useEffect(() => {
+    if (searchInput.trim() === '' && searchTerm !== '') {
+      setSearchTerm('');
+    }
+  }, [searchInput, searchTerm]);
+
+  const handleSearch = () => {
+    setSearchTerm(searchInput.trim());
+  };
+
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSearch();
+    }
+  };
+
+  const filteredLessons = useMemo(() => {
+    let list = lessons;
+    const q = searchTerm.trim().toLowerCase();
+    if (q) {
+      list = list.filter((l) => (l.name || '').toLowerCase().includes(q));
+    }
+    const fc = (filterCategory || '').trim();
+    if (fc) {
+      list = list.filter((l) => (l.category || '') === fc);
+    }
+    return list;
+  }, [lessons, searchTerm, filterCategory]);
+
   const handleAddLesson = () => {
     if (!newLessonName.trim()) {
       setError('Lesson name is required');
@@ -139,13 +185,15 @@ export default function Lessons() {
     }
     
     createMutation.mutate({
-      name: newLessonName.trim()
+      name: newLessonName.trim(),
+      category: normalizeLessonCategory(newLessonCategory),
     });
   };
 
   const handleEditLesson = (lesson) => {
     setEditingLesson(lesson);
     setEditName(lesson.name);
+    setEditCategory(lesson.category != null && lesson.category !== '' ? lesson.category : '');
     setError('');
   };
 
@@ -155,11 +203,12 @@ export default function Lessons() {
       return;
     }
     
-    updateMutation.mutate({ 
-      id: editingLesson.id, 
+    updateMutation.mutate({
+      id: editingLesson.id,
       data: {
-        name: editName.trim()
-      }
+        name: editName.trim(),
+        category: normalizeLessonCategory(editCategory),
+      },
     });
   };
 
@@ -184,12 +233,14 @@ export default function Lessons() {
   const cancelEdit = () => {
     setEditingLesson(null);
     setEditName('');
+    setEditCategory('');
     setError('');
   };
 
   const cancelAdd = () => {
     setShowAddForm(false);
     setNewLessonName('');
+    setNewLessonCategory('');
     setError('');
   };
 
@@ -236,7 +287,46 @@ export default function Lessons() {
           Lessons Management
         </div>
       </Title>
-      
+
+      <div
+        style={{
+          maxWidth: 800,
+          margin: '0 auto 16px',
+          width: '100%',
+          boxSizing: 'border-box',
+        }}
+      >
+        <InputWithButton
+          placeholder="Search by lesson name"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          onKeyDown={handleSearchKeyPress}
+          onButtonClick={handleSearch}
+        />
+      </div>
+      <div
+        style={{
+          maxWidth: 800,
+          margin: '0 auto 24px',
+          width: '100%',
+          boxSizing: 'border-box',
+        }}
+      >
+        <div className="filters-container">
+          <div className="filter-row">
+            <div className="filter-group">
+              <label className="filter-label">Filter by category</label>
+              <CourseSelect
+                selectedGrade={filterCategory}
+                onGradeChange={setFilterCategory}
+                required={false}
+                showAllOption={true}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Main Container */}
       <div className="main-container" style={{ 
         maxWidth: '800px', 
@@ -291,8 +381,6 @@ export default function Lessons() {
               gap: '8px',
               transition: 'all 0.2s'
             }}
-            onMouseEnter={(e) => e.target.style.backgroundColor = '#218838'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = '#28a745'}
           >
             <Image src="/plus.svg" alt="Add" width={20} height={20} />
             Add Lesson
@@ -328,9 +416,16 @@ export default function Lessons() {
               Click "Add Lesson" to create your first lesson.
             </p>
           </div>
+        ) : filteredLessons.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px' }}>
+            <h3 style={{ color: '#666', margin: '0 0 16px 0' }}>No lessons match</h3>
+            <p style={{ color: '#999', margin: 0 }}>
+              Try a different search or category filter.
+            </p>
+          </div>
         ) : (
           <div style={{ display: 'grid', gap: '16px' }}>
-            {lessons.map((lesson) => (
+            {filteredLessons.map((lesson) => (
               <div
                 key={lesson.id}
                 className="lesson-card"
@@ -359,12 +454,24 @@ export default function Lessons() {
                   }}>
                     {lesson.name}
                   </h4>
+                  <p style={{
+                    margin: '0 0 6px 0',
+                    color: '#495057',
+                    fontSize: '0.95rem'
+                  }}>
+                    <strong>Category:</strong>{' '}
+                    {lesson.category != null && lesson.category !== '' ? (
+                      <span style={{ color: '#1FA8DC', fontWeight: 600 }}>{lesson.category}</span>
+                    ) : (
+                      <span style={{ color: '#6c757d' }}>Not Categorized</span>
+                    )}
+                  </p>
                   <p style={{ 
                     margin: 0, 
                     color: '#666',
                     fontSize: '0.9rem'
                   }}>
-                    Created: {new Date(lesson.createdAt).toLocaleDateString()}
+                    Created: {lesson.createdAt ? new Date(lesson.createdAt).toLocaleDateString() : '—'}
                   </p>
                 </div>
                 <div className="lesson-actions" style={{ display: 'flex', gap: '8px' }}>
@@ -531,6 +638,16 @@ export default function Lessons() {
                 />
               </div>
 
+              <div className="form-field">
+                <label>Category</label>
+                <CourseSelect
+                  selectedGrade={newLessonCategory}
+                  onGradeChange={setNewLessonCategory}
+                  required={false}
+                  showAllOption={true}
+                />
+              </div>
+
               <div className="add-lesson-buttons">
                 <button
                   onClick={handleAddLesson}
@@ -604,6 +721,16 @@ export default function Lessons() {
                 />
               </div>
 
+              <div className="form-field">
+                <label>Category</label>
+                <CourseSelect
+                  selectedGrade={editCategory}
+                  onGradeChange={setEditCategory}
+                  required={false}
+                  showAllOption={true}
+                />
+              </div>
+
               <div className="edit-lesson-buttons">
                 <button
                   onClick={handleUpdateLesson}
@@ -642,7 +769,31 @@ export default function Lessons() {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
-        
+
+        .filters-container {
+          background: white;
+          border-radius: 16px;
+          padding: 24px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        .filter-row {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 0;
+          flex-wrap: wrap;
+        }
+        .filter-group {
+          flex: 1;
+          min-width: 180px;
+        }
+        .filter-label {
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+          color: #495057;
+          font-size: 0.95rem;
+        }
+
         .confirm-modal {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
@@ -832,6 +983,16 @@ export default function Lessons() {
         }
         
         @media (max-width: 768px) {
+          .filters-container {
+            padding: 16px;
+          }
+          .filter-row {
+            flex-direction: column;
+            gap: 8px;
+          }
+          .filter-group {
+            min-width: auto;
+          }
           .lessons-page-container {
             margin: 20px auto !important;
             padding: 15px 10px !important;
@@ -863,6 +1024,12 @@ export default function Lessons() {
           }
           .add-lesson-buttons button, .edit-lesson-buttons button {
             width: 100% !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .filters-container {
+            padding: 12px;
           }
         }
       `}</style>
