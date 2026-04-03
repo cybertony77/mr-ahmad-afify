@@ -997,9 +997,6 @@ export default function Lessons() {
             margin: 20px auto !important;
             padding: 15px 10px !important;
           }
-          .main-container {
-            padding: 15px 10px !important;
-          }
           .container-header {
             flex-direction: column !important;
             align-items: stretch !important;

@@ -97,6 +97,15 @@
   min-width: 36px;
   min-height: 36px;
   border-radius: 10px;
+  color: #0c4053 !important;
+  background-color: rgb(32 129 166 / 50%) !important;
+  border: 1px solid rgba(12, 64, 83, 0.2) !important;
+  box-shadow: none;
+}
+
+.carouselOuter .control:not([data-inactive]):hover {
+  background-color: rgb(32 129 166 / 65%) !important;
+  border-color: rgba(12, 64, 83, 0.35) !important;
 }
 
 .control[data-inactive] {

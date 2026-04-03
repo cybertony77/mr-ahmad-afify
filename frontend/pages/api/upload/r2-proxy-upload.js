@@ -74,8 +74,9 @@ export default async function handler(req, res) {
         Body: bodyStream,
         ContentType: contentType,
       },
-      queueSize: 4,
-      partSize: 10 * 1024 * 1024, // 10 MiB parts (multipart for large files)
+      // Larger parts + more concurrency = fewer round-trips to R2 for multi‑GB files
+      queueSize: 8,
+      partSize: 32 * 1024 * 1024, // 32 MiB parts (multipart; avoids tiny part storms)
       leavePartsOnError: false,
     });
 

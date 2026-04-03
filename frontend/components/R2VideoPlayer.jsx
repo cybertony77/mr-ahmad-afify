@@ -1,16 +1,32 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useMemo, useCallback } from "react";
+
+function buildVideoApiPath(r2Key) {
+  if (!r2Key) return null;
+  const segments = String(r2Key).split("/").filter(Boolean);
+  return segments.map((s) => encodeURIComponent(s)).join("/");
+}
 
 export default function R2VideoPlayer({ r2Key, videoId, onComplete }) {
   const videoRef = useRef(null);
   const [error, setError] = useState(null);
   const hasMarkedComplete = useRef(false);
+  /** Cache-bust query; bump when r2Key changes (not on first mount) or on retry */
+  const [streamNonce, setStreamNonce] = useState(() => Date.now());
+  const prevR2KeyRef = useRef(r2Key);
 
-  // Build the streaming URL directly — no API call needed.
-  // The browser sends cookies automatically with the <video> GET request,
-  // so the API route can authenticate the user.
-  const videoUrl = r2Key ? `/api/videos/${r2Key}` : null;
+  useEffect(() => {
+    if (prevR2KeyRef.current !== r2Key) {
+      prevR2KeyRef.current = r2Key;
+      setStreamNonce(Date.now());
+    }
+  }, [r2Key]);
 
-  // Track video progress and mark complete at 90%
+  const videoUrl = useMemo(() => {
+    const path = buildVideoApiPath(r2Key);
+    if (!path) return null;
+    return `/api/videos/${path}?_=${streamNonce}`;
+  }, [r2Key, streamNonce]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoUrl) return;
@@ -34,11 +50,15 @@ export default function R2VideoPlayer({ r2Key, videoId, onComplete }) {
     };
   }, [videoUrl, videoId, onComplete]);
 
-  // Reset completion flag when video changes
   useEffect(() => {
     hasMarkedComplete.current = false;
     setError(null);
   }, [r2Key]);
+
+  const handleRetry = useCallback(() => {
+    setError(null);
+    setStreamNonce(Date.now());
+  }, []);
 
   if (!videoUrl) {
     return (
@@ -73,13 +93,8 @@ export default function R2VideoPlayer({ r2Key, videoId, onComplete }) {
       }}>
         <div>{error}</div>
         <button
-          onClick={() => {
-            setError(null);
-            // Force the video element to reload by remounting
-            if (videoRef.current) {
-              videoRef.current.load();
-            }
-          }}
+          type="button"
+          onClick={handleRetry}
           style={{
             padding: '8px 20px',
             backgroundColor: '#1FA8DC',
@@ -98,6 +113,7 @@ export default function R2VideoPlayer({ r2Key, videoId, onComplete }) {
 
   return (
     <video
+      key={`${r2Key}-${streamNonce}`}
       ref={videoRef}
       src={videoUrl}
       controls

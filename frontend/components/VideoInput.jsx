@@ -14,6 +14,8 @@ export default function VideoInput({
 }) {
   const [activeTab, setActiveTab] = useState(video.video_source === 'r2' && showUploadTab ? 'upload' : 'youtube');
   const [uploadProgress, setUploadProgress] = useState(video.upload_progress || 0);
+  /** 'sending' = bytes leaving browser; 'finishing' = bytes sent, waiting for HTTP OK (R2 or server→R2) */
+  const [uploadPhase, setUploadPhase] = useState('idle');
   const [uploadStatus, setUploadStatus] = useState(video.upload_status || 'idle'); // idle | uploading | done | error
   const [uploadFileName, setUploadFileName] = useState(video.upload_file_name || '');
   const [uploadError, setUploadError] = useState('');
@@ -67,6 +69,7 @@ export default function VideoInput({
     setUploadFileName(file.name);
     setUploadStatus('uploading');
     setUploadProgress(0);
+    setUploadPhase('sending');
 
     try {
       // Step 1: Key + presigned PUT URL from our API (also applies bucket CORS when possible)
@@ -82,21 +85,36 @@ export default function VideoInput({
         new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhrRef.current = xhr;
+          // Large videos: avoid browser default timeout (often none, but some stacks cap)
+          xhr.timeout = 0;
 
           xhr.upload.addEventListener('progress', (event) => {
-            if (event.lengthComputable) {
-              const percent = Math.round((event.loaded / event.total) * 100);
-              setUploadProgress(percent);
+            if (event.lengthComputable && event.total > 0) {
+              const raw = (event.loaded / event.total) * 100;
+              // Never show 100% until xhr 'load' — bytes may be sent but storage still confirming / server still pushing to R2
+              const capped = Math.min(99, Math.round(raw));
+              setUploadProgress(capped);
+              setUploadPhase(event.loaded >= event.total ? 'finishing' : 'sending');
             }
           });
 
+          xhr.addEventListener('loadstart', () => {
+            setUploadPhase('sending');
+          });
+
           xhr.addEventListener('load', () => {
-            if (xhr.status >= 200 && xhr.status < 300) resolve();
-            else reject(new Error(opts.label + xhr.status));
+            if (xhr.status >= 200 && xhr.status < 300) {
+              setUploadProgress(100);
+              setUploadPhase('done');
+              resolve();
+            } else {
+              reject(new Error(opts.label + xhr.status));
+            }
           });
 
           xhr.addEventListener('error', () => reject(new Error(opts.label + 'network')));
           xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
+          xhr.addEventListener('timeout', () => reject(new Error(opts.label + 'timeout')));
 
           opts.openSend(xhr);
         });
@@ -115,6 +133,9 @@ export default function VideoInput({
       } catch (directErr) {
         if (directErr.message === 'Upload cancelled') throw directErr;
 
+        setUploadProgress(0);
+        setUploadPhase('sending');
+
         const formData = new FormData();
         formData.append('file', file);
         formData.append('key', key);
@@ -130,10 +151,10 @@ export default function VideoInput({
 
       // Step 3: Success - save the R2 key
       setUploadStatus('done');
-      setUploadProgress(100);
       onR2Upload(index, key, file.name);
 
     } catch (error) {
+      setUploadPhase('idle');
       if (error.message === 'Upload cancelled') {
         setUploadStatus('idle');
         setUploadProgress(0);
@@ -155,6 +176,7 @@ export default function VideoInput({
   const handleRemoveUpload = () => {
     setUploadStatus('idle');
     setUploadProgress(0);
+    setUploadPhase('idle');
     setUploadFileName('');
     setUploadError('');
     onR2Upload(index, '', '');
@@ -326,7 +348,10 @@ export default function VideoInput({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                 <span style={{ color: '#333', fontSize: '0.9rem', fontWeight: '500' }}>
-                  Uploading: {uploadFileName}
+                  {uploadPhase === 'finishing'
+                    ? 'Finishing'
+                    : 'Uploading'}
+                  : {uploadFileName}
                 </span>
                 <button
                   type="button"
@@ -357,7 +382,7 @@ export default function VideoInput({
                   height: '100%',
                   backgroundColor: '#1FA8DC',
                   borderRadius: '4px',
-                  transition: 'width 0.3s ease',
+                  transition: uploadPhase === 'finishing' ? 'none' : 'width 0.2s ease-out',
                 }} />
               </div>
               <div style={{ textAlign: 'right', marginTop: '6px', color: '#666', fontSize: '0.85rem' }}>
@@ -419,6 +444,7 @@ export default function VideoInput({
                 onClick={() => {
                   setUploadStatus('idle');
                   setUploadProgress(0);
+                  setUploadPhase('idle');
                   setUploadFileName('');
                   setUploadError('');
                   if (fileInputRef.current) fileInputRef.current.value = '';

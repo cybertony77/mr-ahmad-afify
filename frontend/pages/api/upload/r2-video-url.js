@@ -7,7 +7,8 @@ import {
   getR2Config,
 } from '../../../lib/r2Server';
 
-const PRESIGN_GET_EXPIRES_SEC = 4 * 60 * 60; // 4 hours — aligned with PUT presign TTL
+/** Max allowed for SigV4 presigned GET; avoids “URL expired” if clients hold the link */
+const PRESIGN_GET_EXPIRES_SEC = 7 * 24 * 60 * 60; // 7 days
 
 function getKeyFromRequest(req) {
   if (req.method === 'GET') {
@@ -45,6 +46,9 @@ export default async function handler(req, res) {
     const signedUrl = await getSignedUrl(s3Client, command, {
       expiresIn: PRESIGN_GET_EXPIRES_SEC,
     });
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
 
     res.json({
       signedUrl,

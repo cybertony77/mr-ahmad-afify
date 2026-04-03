@@ -166,7 +166,11 @@ export default async function handler(req, res) {
         'Content-Length': chunkSize,
         'Content-Range': `bytes ${start}-${end}/${totalSize}`,
         'Accept-Ranges': 'bytes',
-        'Cache-Control': 'private, max-age=3600',
+        // Do not cache authenticated streams — stale cached chunks break Range playback after TTL / tab backgrounding
+        'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+        Vary: 'Cookie',
       });
 
       // Stream the body
@@ -175,9 +179,17 @@ export default async function handler(req, res) {
       }
 
       const stream = getResult.Body;
+      const cleanup = () => {
+        try {
+          if (stream && typeof stream.destroy === 'function') stream.destroy();
+        } catch (_) {}
+      };
+      req.on('close', cleanup);
+      req.on('aborted', cleanup);
       stream.pipe(res);
       stream.on('error', (err) => {
         console.error('Stream error:', err);
+        cleanup();
         if (!res.headersSent) {
           res.status(500).end();
         } else {
@@ -205,7 +217,10 @@ export default async function handler(req, res) {
         'Content-Type': contentType,
         'Content-Length': contentLength,
         'Accept-Ranges': 'bytes',
-        'Cache-Control': 'private, max-age=3600',
+        'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+        Vary: 'Cookie',
       });
 
       if (req.method === 'HEAD') {
@@ -213,9 +228,17 @@ export default async function handler(req, res) {
       }
 
       const stream = getResult.Body;
+      const cleanup = () => {
+        try {
+          if (stream && typeof stream.destroy === 'function') stream.destroy();
+        } catch (_) {}
+      };
+      req.on('close', cleanup);
+      req.on('aborted', cleanup);
       stream.pipe(res);
       stream.on('error', (err) => {
         console.error('Stream error:', err);
+        cleanup();
         if (!res.headersSent) {
           res.status(500).end();
         } else {

@@ -3,6 +3,42 @@ import { createPortal } from 'react-dom';
 import { IconZoomIn, IconZoomOut, IconX } from '@tabler/icons-react';
 import { Image } from '@mantine/core';
 
+/** Toolbar on teal gradient — not the same as carousel arrow styling */
+const TEAL = '#1fa8dc';
+const TEAL_MUTED = 'rgba(31, 168, 220, 0.35)';
+const TEAL_SOFT_BG = 'rgba(31, 168, 220, 0.1)';
+const TEAL_BORDER = 'rgba(31, 168, 220, 0.5)';
+
+const zoomBtnEnabled = (disabled) => ({
+  padding: '10px 14px',
+  border: `1px solid ${disabled ? 'transparent' : TEAL_BORDER}`,
+  background: disabled ? TEAL_SOFT_BG : 'rgba(255, 255, 255, 0.95)',
+  color: disabled ? TEAL_MUTED : TEAL,
+  borderRadius: '8px',
+  cursor: disabled ? 'not-allowed' : 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  transition: 'all 0.2s ease',
+  fontWeight: '600',
+  boxShadow: disabled ? 'none' : '0 2px 4px rgba(31, 168, 220, 0.12)',
+});
+
+const resetZoomBtnStyle = {
+  padding: '10px 14px',
+  border: '1px solid rgba(220, 53, 69, 0.35)',
+  background: 'rgba(255, 255, 255, 0.95)',
+  color: '#dc3545',
+  borderRadius: '8px',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  transition: 'all 0.2s ease',
+  fontWeight: '600',
+  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.08)',
+};
+
 export default function ZoomableImage({ src, alt = 'Question Image', style = {}, onImageLoad }) {
   const [zoom, setZoom] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -13,7 +49,6 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
   const imageRef = useRef(null);
   const containerRef = useRef(null);
   const controlsRef = useRef(null);
-  const fullscreenContainerRef = useRef(null);
   const [mounted, setMounted] = useState(false);
 
   const minZoom = 0.5;
@@ -158,20 +193,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
             }}
             disabled={zoom <= minZoom}
             onMouseDown={(e) => e.stopPropagation()}
-            style={{
-              padding: '10px 14px',
-              border: 'none',
-              background: zoom <= minZoom ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.9)',
-              color: zoom <= minZoom ? 'rgba(255, 255, 255, 0.5)' : '#1FA8DC',
-              borderRadius: '8px',
-              cursor: zoom <= minZoom ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s ease',
-              fontWeight: '600',
-              boxShadow: zoom <= minZoom ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)'
-            }}
+            style={zoomBtnEnabled(zoom <= minZoom)}
             title="Zoom Out"
           >
             <IconZoomOut size={20} />
@@ -203,20 +225,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
             }}
             disabled={zoom >= maxZoom}
             onMouseDown={(e) => e.stopPropagation()}
-            style={{
-              padding: '10px 14px',
-              border: 'none',
-              background: zoom >= maxZoom ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.9)',
-              color: zoom >= maxZoom ? 'rgba(255, 255, 255, 0.5)' : '#1FA8DC',
-              borderRadius: '8px',
-              cursor: zoom >= maxZoom ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s ease',
-              fontWeight: '600',
-              boxShadow: zoom >= maxZoom ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)'
-            }}
+            style={zoomBtnEnabled(zoom >= maxZoom)}
             title="Zoom In"
           >
             <IconZoomIn size={20} />
@@ -231,20 +240,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
                 handleResetZoom();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              style={{
-                padding: '10px 14px',
-                border: 'none',
-                background: 'rgba(255, 255, 255, 0.9)',
-                color: '#dc3545',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease',
-                fontWeight: '600',
-                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-              }}
+              style={resetZoomBtnStyle}
               title="Reset Zoom"
             >
               <IconX size={20} />
@@ -266,20 +262,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
               toggleFullscreen();
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            style={{
-              padding: '10px 14px',
-              border: 'none',
-              background: 'rgba(255, 255, 255, 0.9)',
-              color: '#28a745',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s ease',
-              fontWeight: '600',
-              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-            }}
+            style={zoomBtnEnabled(false)}
             title="Fullscreen"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -351,42 +334,34 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
         </div>
       </div>
 
-      {/* Fullscreen: portal to body so position:fixed is not trapped by carousel transform */}
+      {/* Fullscreen: portal to body; pan area is flex-filled with overflow:hidden like inline mode */}
       {mounted &&
         isFullscreen &&
         createPortal(
         <div
           style={{
             position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
+            inset: 0,
             background: 'rgba(0, 0, 0, 0.95)',
             zIndex: 10000,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '20px'
+            flexDirection: 'column',
+            boxSizing: 'border-box',
           }}
           onClick={toggleFullscreen}
         >
           <div
-            ref={fullscreenContainerRef}
             style={{
-              position: 'relative',
-              maxWidth: '100%',
-              maxHeight: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              flex: 1,
+              minHeight: 0,
               width: '100%',
-              height: '100%'
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'relative',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Fullscreen Controls Bar */}
-            <div 
+            <div
               className="fullscreen-controls"
               style={{
                 position: 'fixed',
@@ -404,7 +379,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
                 padding: '12px 20px',
                 boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)',
                 flexWrap: 'wrap',
-                maxWidth: '90%'
+                maxWidth: '90%',
               }}
             >
               <button
@@ -416,40 +391,30 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
                 }}
                 disabled={zoom <= minZoom}
                 onMouseDown={(e) => e.stopPropagation()}
-                style={{
-                  padding: '10px 14px',
-                  border: 'none',
-                  background: zoom <= minZoom ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.9)',
-                  color: zoom <= minZoom ? 'rgba(255, 255, 255, 0.5)' : '#1FA8DC',
-                  borderRadius: '8px',
-                  cursor: zoom <= minZoom ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: '600',
-                  boxShadow: zoom <= minZoom ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)'
-                }}
+                style={zoomBtnEnabled(zoom <= minZoom)}
               >
                 <IconZoomOut size={22} />
               </button>
-              
-              <div style={{
-                padding: '8px 16px',
-                fontSize: '1rem',
-                fontWeight: '700',
-                color: 'white',
-                background: 'rgba(255, 255, 255, 0.2)',
-                borderRadius: '8px',
-                minWidth: '70px',
-                textAlign: 'center',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backdropFilter: 'blur(10px)'
-              }}>
+
+              <div
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '1rem',
+                  fontWeight: '700',
+                  color: 'white',
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  borderRadius: '8px',
+                  minWidth: '70px',
+                  textAlign: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backdropFilter: 'blur(10px)',
+                }}
+              >
                 {Math.round(zoom * 100)}%
               </div>
-              
+
               <button
                 type="button"
                 onClick={(e) => {
@@ -459,23 +424,11 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
                 }}
                 disabled={zoom >= maxZoom}
                 onMouseDown={(e) => e.stopPropagation()}
-                style={{
-                  padding: '10px 14px',
-                  border: 'none',
-                  background: zoom >= maxZoom ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.9)',
-                  color: zoom >= maxZoom ? 'rgba(255, 255, 255, 0.5)' : '#1FA8DC',
-                  borderRadius: '8px',
-                  cursor: zoom >= maxZoom ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: '600',
-                  boxShadow: zoom >= maxZoom ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)'
-                }}
+                style={zoomBtnEnabled(zoom >= maxZoom)}
               >
                 <IconZoomIn size={22} />
               </button>
-              
+
               {zoom !== 1 && (
                 <button
                   type="button"
@@ -485,31 +438,21 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
                     handleResetZoom();
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
-                  style={{
-                    padding: '10px 14px',
-                    border: 'none',
-                    background: 'rgba(255, 255, 255, 0.9)',
-                    color: '#dc3545',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: '600',
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-                  }}
+                  style={resetZoomBtnStyle}
                 >
                   <IconX size={22} />
                 </button>
               )}
-              
-              <div style={{
-                width: '1px',
-                height: '30px',
-                background: 'rgba(255, 255, 255, 0.3)',
-                margin: '0 4px'
-              }}></div>
-              
+
+              <div
+                style={{
+                  width: '1px',
+                  height: '30px',
+                  background: 'rgba(255, 255, 255, 0.3)',
+                  margin: '0 4px',
+                }}
+              />
+
               <button
                 type="button"
                 onClick={(e) => {
@@ -518,19 +461,8 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
                   toggleFullscreen();
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
-                style={{
-                  padding: '10px 14px',
-                  border: 'none',
-                  background: 'rgba(255, 255, 255, 0.9)',
-                  color: '#dc3545',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: '600',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-                }}
+                style={zoomBtnEnabled(false)}
+                title="Exit fullscreen"
               >
                 <IconX size={22} />
               </button>
@@ -538,29 +470,73 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
 
             <div
               style={{
-                position: 'relative',
-                maxWidth: '100%',
-                maxHeight: '100%',
-                cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+                flex: 1,
+                minHeight: 0,
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '88px 16px 24px',
+                boxSizing: 'border-box',
               }}
-              onMouseDown={handleMouseDown}
             >
-              <Image
-                src={src}
-                alt={alt}
-                radius="md"
+              <div
                 style={{
+                  overflow: 'hidden',
+                  width: '100%',
+                  height: '100%',
                   maxWidth: '100%',
                   maxHeight: '100%',
-                  transform: `scale(${zoom}) translate(${position.x / zoom}px, ${position.y / zoom}px)`,
-                  transformOrigin: 'center center',
-                  transition: zoom === 1 ? 'transform 0.3s ease' : 'none',
-                  userSelect: 'none',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
-                  display: 'block'
+                  cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  touchAction: 'none',
                 }}
-                draggable={false}
-              />
+                onMouseDown={handleMouseDown}
+                onTouchStart={(e) => {
+                  if (zoom > 1 && e.touches.length === 1) {
+                    const touch = e.touches[0];
+                    setIsDragging(true);
+                    setDragStart({
+                      x: touch.clientX - position.x,
+                      y: touch.clientY - position.y,
+                    });
+                  }
+                }}
+                onTouchMove={(e) => {
+                  if (isDragging && zoom > 1 && e.touches.length === 1) {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    setPosition({
+                      x: touch.clientX - dragStart.x,
+                      y: touch.clientY - dragStart.y,
+                    });
+                  }
+                }}
+                onTouchEnd={() => setIsDragging(false)}
+              >
+                <Image
+                  src={src}
+                  alt={alt}
+                  radius="md"
+                  fit="contain"
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    width: 'auto',
+                    height: 'auto',
+                    transform: `scale(${zoom}) translate(${position.x / zoom}px, ${position.y / zoom}px)`,
+                    transformOrigin: 'center center',
+                    transition: zoom === 1 ? 'transform 0.3s ease' : 'none',
+                    userSelect: 'none',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+                    display: 'block',
+                  }}
+                  draggable={false}
+                />
+              </div>
             </div>
           </div>
         </div>,

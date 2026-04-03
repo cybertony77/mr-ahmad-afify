@@ -4,7 +4,8 @@ import Image from 'next/image';
 import Title from '../../../../components/Title';
 import apiClient from '../../../../lib/axios';
 import NeedHelp from '../../../../components/NeedHelp';
-import ZoomableImage from '../../../../components/ZoomableImage';
+import QuestionImagesCarousel from '../../../../components/student/QuestionImagesCarousel';
+import { listQuestionPicturePublicIds } from '../../../../lib/questionPictures';
 
 export default function PreviewMockExamDetails() {
   const router = useRouter();
@@ -57,24 +58,24 @@ export default function PreviewMockExamDetails() {
     if (!mockExam || !mockExam.questions) return;
 
     const fetchImages = async () => {
-      const imagePromises = {};
-      
+      const byPublicId = {};
       for (const question of mockExam.questions) {
-        const imageField = question.question_image || question.question_picture;
-        if (imageField) {
+        const ids = listQuestionPicturePublicIds(question);
+        for (const publicId of ids) {
+          if (byPublicId[publicId]) continue;
           try {
-            const response = await apiClient.get(`/api/online_mock_exams/image?public_id=${imageField}`);
-            if (response.data.url) {
-              // Use question_picture public_id as key (unique per question)
-              imagePromises[imageField] = response.data.url;
+            const response = await apiClient.get(
+              `/api/online_mock_exams/image?public_id=${encodeURIComponent(publicId)}`
+            );
+            if (response.data?.url) {
+              byPublicId[publicId] = response.data.url;
             }
           } catch (err) {
-            console.error(`Error fetching image for question: ${question.question_text}`, err);
+            console.error('Error fetching mock exam question image:', err);
           }
         }
       }
-      
-      setQuestionImages(imagePromises);
+      setQuestionImages(byPublicId);
     };
 
     fetchImages();
@@ -89,7 +90,7 @@ export default function PreviewMockExamDetails() {
         <div style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
           <Title backText="Back" href={`/dashboard/manage_online_system/preview_student_mock_exams?student_id=${student_id}`}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Image src="/exam.svg" alt="Mock Exam Details" width={32} height={32} />
+              <Image src="/details.svg" alt="Mock Exam Details" width={32} height={32} />
               Mock Exam Details
             </div>
           </Title>
@@ -313,9 +314,9 @@ export default function PreviewMockExamDetails() {
       padding: "20px 5px 20px 5px" 
     }}>
       <div className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
-        <Title backText="Back" href={`/dashboard/manage_online_system/preview_student_mock_exams`}>
+        <Title backText="Back" href={`/dashboard/manage_online_system/preview_student_mock_exams?student_id=${student_id}`}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Image src="/exam.svg" alt="Mock Exam Details" width={32} height={32} />
+            <Image src="/details.svg" alt="Mock Exam Details" width={32} height={32} />
             Mock Exam Details
           </div>
         </Title>
@@ -431,21 +432,28 @@ export default function PreviewMockExamDetails() {
                     </div>
                     
                     {/* Question Image */}
-                    {(question.question_image || question.question_picture) && questionImages[question.question_image || question.question_picture] && (
-                      <ZoomableImage
-                        src={questionImages[question.question_image || question.question_picture]}
-                        alt="Question"
-                      />
-                    )}
+                    <QuestionImagesCarousel
+                      question={question}
+                      imageUrls={questionImages}
+                      instanceKey={`preview-mock-${mock_exam_id}-q-${idx}`}
+                    />
 
-                    <div style={{
-                      fontSize: '1rem',
-                      color: '#495057',
-                      marginBottom: '16px',
-                      lineHeight: '1.6'
-                    }}>
-                      {question.question_text || question.question}
-                    </div>
+                    {question.question_text && question.question_text.trim() !== '' && (
+                      <div
+                        style={{
+                          fontSize: '1rem',
+                          color: '#495057',
+                          marginBottom: '16px',
+                          lineHeight: '1.6',
+                          padding: '12px 16px',
+                          backgroundColor: '#f8f9fa',
+                          borderRadius: '8px',
+                          border: '2px solid #e9ecef',
+                        }}
+                      >
+                        {question.question_text}
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -513,9 +521,13 @@ export default function PreviewMockExamDetails() {
                             fontSize: '1rem',
                             fontWeight: '700'
                           }}>
-                            {answerOptions[ansIdx]}
+                            {answer}
                           </div>
-                          {answer}
+                          {question.answer_texts && question.answer_texts[ansIdx] && (
+                            <span style={{ flex: 1, fontSize: '0.95rem' }}>
+                              {question.answer_texts[ansIdx]}
+                            </span>
+                          )}
                         </div>
                       );
                     })}

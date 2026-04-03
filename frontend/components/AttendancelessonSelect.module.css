@@ -123,6 +123,7 @@
   background: linear-gradient(90deg, transparent, #e2e8f0 12%, #e2e8f0 88%, transparent);
   margin: 0;
   border: none;
+  margin-bottom: 10px;
 }
 
 /* Category block */
