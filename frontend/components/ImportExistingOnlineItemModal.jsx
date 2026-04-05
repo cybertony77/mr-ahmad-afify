@@ -316,7 +316,6 @@ export default function ImportExistingOnlineItemModal({
                   >
                     {displayLabel}
                   </span>
-                  <span style={{ color: '#6c757d', fontSize: '0.75rem', flexShrink: 0 }}>▾</span>
                 </div>
               </div>
             ) : (
