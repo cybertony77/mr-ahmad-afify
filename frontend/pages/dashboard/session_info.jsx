@@ -58,13 +58,6 @@ export default function SessionInfo() {
   // Require all filters to be selected to show any data
   const allFiltersSelected = !!(selectedCenter && selectedCourseType && selectedLesson);
 
-  useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => setError(""), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
-
   // Handle message state updates (simplified - SessionTable handles the local state)
   const handleMessageStateChange = (studentId, messageState) => {
     console.log('Message state changed for student:', studentId, 'to:', messageState);
@@ -127,20 +120,10 @@ export default function SessionInfo() {
       }
     };
 
-    // Also handle when a dropdown opens to close others
-    const handleDropdownOpen = () => {
-      // Close any open dropdowns when a new one opens
-      if (openDropdown) {
-        setOpenDropdown(null);
-      }
-    };
-
     document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('focusin', handleDropdownOpen);
-    
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('focusin', handleDropdownOpen);
     };
   }, [openDropdown]);
 

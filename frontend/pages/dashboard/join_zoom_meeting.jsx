@@ -7,7 +7,7 @@ import Title from '../../components/Title';
 import CourseSelect from '../../components/CourseSelect';
 import CourseTypeSelect from '../../components/CourseTypeSelect';
 import PeriodSelect from '../../components/PeriodSelect';
-import StudentLessonSelect from '../../components/StudentLessonSelect';
+import AttendancelessonSelect from '../../components/AttendancelessonSelect';
 
 // Time Input component (hours, minutes, AM/PM using PeriodSelect)
 function TimeInput({ value, onChange, label, accentColor = '#2d8cff' }) {
@@ -824,8 +824,7 @@ export default function JoinZoomMeeting() {
               
               <div className="form-field">
                 <label>Lesson <span className="required-star">*</span></label>
-                <StudentLessonSelect
-                  availableLessons={availableLessons}
+                <AttendancelessonSelect
                   selectedLesson={newLesson}
                   onLessonChange={(lesson) => {
                     setNewLesson(lesson);
@@ -839,7 +838,7 @@ export default function JoinZoomMeeting() {
                     setNewCourseTypeOpen(false);
                   }}
                   onClose={() => setNewLessonOpen(false)}
-                  placeholder="Select Lesson"
+                  placeholder="Select Attendance Lesson"
                 />
               </div>
 
@@ -987,8 +986,7 @@ export default function JoinZoomMeeting() {
               
               <div className="form-field">
                 <label>Lesson <span className="required-star">*</span></label>
-                <StudentLessonSelect
-                  availableLessons={availableLessons}
+                <AttendancelessonSelect
                   selectedLesson={editLesson}
                   onLessonChange={(lesson) => {
                     setEditLesson(lesson);
@@ -1002,7 +1000,7 @@ export default function JoinZoomMeeting() {
                     setEditCourseTypeOpen(false);
                   }}
                   onClose={() => setEditLessonOpen(false)}
-                  placeholder="Select Lesson"
+                  placeholder="Select Attendance Lesson"
                 />
               </div>
 
