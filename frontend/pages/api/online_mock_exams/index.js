@@ -2,6 +2,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../lib/authMiddleware';
+import { duplicateCenterMongoFragment } from '../../../lib/onlineItemDuplicate';
 
 function loadEnvConfig() {
   try {
@@ -88,7 +89,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { lesson_name, timer, questions, lesson, course, courseType, mock_exam_type, deadline_type, deadline_date, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
+      const { lesson_name, timer, questions, lesson, course, courseType, center, mock_exam_type, deadline_type, deadline_date, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
 
       const effectiveType = mock_exam_type || 'questions';
 
@@ -165,15 +166,19 @@ export default async function handler(req, res) {
       const courseTrimmed = course.trim();
       const courseTypeTrimmed = courseType ? courseType.trim() : '';
       const lessonTrimmed = lesson.trim();
+      const centerTrimmed = center && String(center).trim() !== '' ? String(center).trim() : null;
       
       const existingMockExam = await db.collection('mock_exams').findOne({
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
-        lesson: lessonTrimmed
+        lesson: lessonTrimmed,
+        ...duplicateCenterMongoFragment(centerTrimmed),
       });
 
       if (existingMockExam) {
-        return res.status(400).json({ error: '❌ A mock exam with this course, course type, and lesson already exists' });
+        return res.status(400).json({
+          error: '❌ A mock exam with this course, course type, lesson, and center already exists',
+        });
       }
 
       // Normalize mock exam state (default to "Activated")
@@ -186,6 +191,7 @@ export default async function handler(req, res) {
         lesson_name: lesson_name.trim(),
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
+        center: centerTrimmed,
         lesson: lessonTrimmed,
         mock_exam_type: effectiveType,
         deadline_type: deadline_type || 'no_deadline',
@@ -235,7 +241,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'PUT') {
       const { id } = req.query;
-      const { lesson_name, timer, questions, lesson, course, courseType, mock_exam_type, deadline_type, deadline_date, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
+      const { lesson_name, timer, questions, lesson, course, courseType, center, mock_exam_type, deadline_type, deadline_date, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
 
       const effectiveType = mock_exam_type || 'questions';
 
@@ -316,16 +322,20 @@ export default async function handler(req, res) {
       const courseTrimmed = course.trim();
       const courseTypeTrimmed = courseType ? courseType.trim() : '';
       const lessonTrimmed = lesson.trim();
+      const centerTrimmed = center && String(center).trim() !== '' ? String(center).trim() : null;
       
       const existingMockExam = await db.collection('mock_exams').findOne({
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
         lesson: lessonTrimmed,
-        _id: { $ne: new ObjectId(id) } // Exclude current mock exam
+        ...duplicateCenterMongoFragment(centerTrimmed),
+        _id: { $ne: new ObjectId(id) }, // Exclude current mock exam
       });
 
       if (existingMockExam) {
-        return res.status(400).json({ error: '❌ A mock exam with this course, course type, and lesson already exists' });
+        return res.status(400).json({
+          error: '❌ A mock exam with this course, course type, lesson, and center already exists',
+        });
       }
 
       // Normalize mock exam state if provided
@@ -337,6 +347,7 @@ export default async function handler(req, res) {
       const updateData = {
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
+        center: centerTrimmed,
         lesson: lessonTrimmed,
         lesson_name: lesson_name.trim(),
         mock_exam_type: effectiveType,

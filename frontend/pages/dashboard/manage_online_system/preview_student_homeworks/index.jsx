@@ -5,6 +5,7 @@ import HomeworkPerformanceChart from '../../../../components/HomeworkPerformance
 import { useStudents, useStudent } from '../../../../lib/api/students';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
+import { itemCenterMatchesStudentMainCenter } from '../../../../lib/studentCenterMatch';
 import Image from 'next/image';
 
 export default function PreviewStudentHomeworks() {
@@ -52,17 +53,17 @@ export default function PreviewStudentHomeworks() {
 
   const allHomeworks = allHomeworksData?.homeworks || [];
 
-  // Get active lessons from Activated homeworks
+  // Activated homework lessons for this student's main center only (chart cross-check)
   const activeLessons = useMemo(() => {
     const lessonSet = new Set();
-    allHomeworks.forEach(homework => {
+    const mainCenter = student?.main_center;
+    allHomeworks.forEach((homework) => {
+      if (!itemCenterMatchesStudentMainCenter(homework.center, mainCenter)) return;
       const itemState = homework.state || homework.account_state || 'Activated';
-      if (itemState === 'Activated') {
-        if (homework.lesson) lessonSet.add(homework.lesson);
-      }
+      if (itemState === 'Activated' && homework.lesson) lessonSet.add(homework.lesson);
     });
     return lessonSet;
-  }, [allHomeworks]);
+  }, [allHomeworks, student?.main_center]);
 
   // Fetch homework performance chart data using API endpoint
   const { data: performanceData, isLoading: isChartLoading } = useQuery({

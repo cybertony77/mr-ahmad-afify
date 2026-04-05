@@ -50,10 +50,12 @@
   justify-content: flex-start;
   height: auto;
   min-height: 0;
+  align-self: flex-start;
   box-sizing: border-box;
 }
 
 .slide :global(.zoomable-image-container) {
+  flex-shrink: 0;
   width: 100% !important;
   max-width: 100% !important;
 }
@@ -98,13 +100,13 @@
   min-height: 36px;
   border-radius: 10px;
   color: #0c4053 !important;
-  background-color: rgb(32 129 166 / 50%) !important;
+  background-color: rgb(31 168 220 / 50%) !important;
   border: 1px solid rgba(12, 64, 83, 0.2) !important;
   box-shadow: none;
 }
 
 .carouselOuter .control:not([data-inactive]):hover {
-  background-color: rgb(32 129 166 / 65%) !important;
+  background-color: rgb(31 168 220 / 65%) !important;
   border-color: rgba(12, 64, 83, 0.35) !important;
 }
 

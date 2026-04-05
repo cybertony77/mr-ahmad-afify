@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../lib/authMiddleware';
 import { pickQuestionPictureFields } from '../../../lib/questionPictures';
+import { itemCenterMatchesStudentMainCenter } from '../../../lib/studentCenterMatch';
 
 function loadEnvConfig() {
   try {
@@ -52,6 +53,7 @@ export default async function handler(req, res) {
       // Get student's course and courseType from students collection
       let studentCourse = null;
       let studentCourseType = null;
+      let studentMainCenter = null;
       if (user.role === 'student') {
         // JWT contains assistant_id, use that to find student
         const studentId = user.assistant_id || user.id;
@@ -62,6 +64,7 @@ export default async function handler(req, res) {
           if (student) {
             studentCourse = student.course;
             studentCourseType = student.courseType;
+            studentMainCenter = student.main_center;
             console.log('✅ Using student course:', studentCourse, 'courseType:', studentCourseType);
           }
         }
@@ -98,8 +101,10 @@ export default async function handler(req, res) {
                                  hwCourseType.toLowerCase() === studentCourseTypeTrimmed.toLowerCase();
           // Activation state: hide deactivated homeworks from students
           const isActivated = hwState !== 'Deactivated';
+
+          const centerMatch = itemCenterMatchesStudentMainCenter(hw.center, studentMainCenter);
           
-          const matches = courseMatch && courseTypeMatch && isActivated;
+          const matches = courseMatch && courseTypeMatch && isActivated && centerMatch;
           console.log(`🔍 Homework course: "${hwCourse}" courseType: "${hwCourseType}" | Matches: ${matches}`);
           return matches;
         });
@@ -121,6 +126,7 @@ export default async function handler(req, res) {
             _id: hw._id,
             course: hw.course || null,
             courseType: hw.courseType || null,
+            center: hw.center || null,
             lesson: hw.lesson || null,
             lesson_name: hw.lesson_name,
             // Expose normalized activation state so frontend can safely filter

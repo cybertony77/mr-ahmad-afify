@@ -4,7 +4,6 @@ import Title from '../../../../components/Title';
 import AttendanceLessonSelect from '../../../../components/AttendancelessonSelect';
 import CourseSelect from '../../../../components/CourseSelect';
 import CourseTypeSelect from '../../../../components/CourseTypeSelect';
-import OnlineSessionPaymentStateSelect from '../../../../components/OnlineSessionPaymentStateSelect';
 import VideoInput from '../../../../components/VideoInput';
 import AccountStateSelect from '../../../../components/AccountStateSelect';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -142,7 +141,7 @@ export default function EditHomeworkVideo() {
       setSelectedCourse(selectedSession.course || '');
       setSelectedCourseType(selectedSession.courseType || '');
       setSelectedLesson(selectedSession.lesson || '');
-      setPaymentState(selectedSession.payment_state || 'paid');
+      setPaymentState(selectedSession.payment_state || 'free_if_homework_done');
       setAccountState(selectedSession.state || selectedSession.account_state || 'Activated');
       setIsLoadingSession(false);
     }
@@ -296,7 +295,8 @@ export default function EditHomeworkVideo() {
       newErrors.lesson = '❌ Lesson is required';
     }
 
-    if (!paymentState || (paymentState !== 'paid' && paymentState !== 'free' && paymentState !== 'free_if_attended')) {
+    const allowedPaymentEdit = ['paid', 'free', 'free_if_homework_done', 'free_if_attended'];
+    if (!paymentState || !allowedPaymentEdit.includes(paymentState)) {
       newErrors.paymentState = '❌ Video Payment State is required';
     }
 
@@ -562,6 +562,22 @@ export default function EditHomeworkVideo() {
                     style={{ marginRight: '10px', width: '18px', height: '18px', cursor: 'pointer' }}
                   />
                   <span style={{ fontWeight: '500' }}>Free</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '10px', borderRadius: '8px', border: paymentState === 'free_if_homework_done' ? '2px solid #1FA8DC' : '2px solid #e9ecef', backgroundColor: paymentState === 'free_if_homework_done' ? '#f0f8ff' : 'white' }}>
+                  <input
+                    type="radio"
+                    name="payment_state"
+                    value="free_if_homework_done"
+                    checked={paymentState === 'free_if_homework_done'}
+                    onChange={(e) => {
+                      setPaymentState(e.target.value);
+                      if (errors.paymentState) {
+                        setErrors({ ...errors, paymentState: '' });
+                      }
+                    }}
+                    style={{ marginRight: '10px', width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontWeight: '500' }}>Free if submitted this lesson homework</span>
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '10px', borderRadius: '8px', border: paymentState === 'free_if_attended' ? '2px solid #1FA8DC' : '2px solid #e9ecef', backgroundColor: paymentState === 'free_if_attended' ? '#f0f8ff' : 'white' }}>
                   <input

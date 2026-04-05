@@ -1,14 +1,20 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import Title from '../../../../components/Title';
 import MockExamSelect from '../../../../components/MockExamSelect';
 import CourseSelect from '../../../../components/CourseSelect';
 import CourseTypeSelect from '../../../../components/CourseTypeSelect';
+import CenterSelect from '../../../../components/CenterSelect';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
 import Image from 'next/image';
 import ZoomableImage from '../../../../components/ZoomableImage';
 import AccountStateSelect from '../../../../components/AccountStateSelect';
+import ImportExistingOnlineItemModal from '../../../../components/ImportExistingOnlineItemModal';
+import { formatMockExamPickerLabel } from '../../../../lib/importOnlineItemLabels';
+import { buildMockExamImportFormState } from '../../../../lib/importOnlineFormState';
+import { fetchImportedQuestionImageUrls } from '../../../../lib/fetchImportedQuestionImageUrls';
+import { centersMatchDuplicateClient } from '../../../../lib/onlineItemDuplicate';
 
 
 export default function AddMockExam() {
@@ -44,6 +50,8 @@ export default function AddMockExam() {
   const [courseDropdownOpen, setCourseDropdownOpen] = useState(false);
   const [selectedCourseType, setSelectedCourseType] = useState('');
   const [courseTypeDropdownOpen, setCourseTypeDropdownOpen] = useState(false);
+  const [selectedCenter, setSelectedCenter] = useState('');
+  const [centerDropdownOpen, setCenterDropdownOpen] = useState(false);
   const [selectedMockExam, setSelectedMockExam] = useState('');
   const [errors, setErrors] = useState({});
   const [uploadingImages, setUploadingImages] = useState({});
@@ -51,6 +59,9 @@ export default function AddMockExam() {
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const errorTimeoutRef = useRef(null);
   const [accountState, setAccountState] = useState('Activated');
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importSelectedId, setImportSelectedId] = useState('');
+  const [importApplyLoading, setImportApplyLoading] = useState(false);
 
   // Fetch all mock exams for duplicate validation
   const { data: mockExamsData } = useQuery({
@@ -66,6 +77,47 @@ export default function AddMockExam() {
   });
 
   const mockExams = mockExamsData?.mockExams || [];
+
+  const importMockExamOptions = useMemo(
+    () =>
+      mockExams.map((me) => ({
+        value: String(me._id),
+        label: formatMockExamPickerLabel(me),
+      })),
+    [mockExams]
+  );
+
+  const handleImportApply = async () => {
+    if (!importSelectedId) return;
+    const me = mockExams.find((m) => String(m._id) === importSelectedId);
+    if (!me) return;
+    const built = buildMockExamImportFormState(me);
+    if (!built) return;
+    setImportApplyLoading(true);
+    try {
+      setFormData(built.formData);
+      setSelectedCourse(built.selectedCourse);
+      setSelectedCourseType(built.selectedCourseType);
+      setSelectedCenter(built.selectedCenter);
+      setSelectedMockExam(built.selectedMockExam);
+      setAccountState(built.accountState);
+      setActiveTab(built.activeTab);
+      setErrors({});
+      setImagePreviews({});
+      if (built.formData.mock_exam_type === 'questions' && built.formData.questions?.length) {
+        const urls = await fetchImportedQuestionImageUrls(
+          built.formData.questions,
+          'online_mock_exams',
+          apiClient
+        );
+        setImagePreviews(urls);
+      }
+      setImportModalOpen(false);
+      setImportSelectedId('');
+    } finally {
+      setImportApplyLoading(false);
+    }
+  };
 
   // Auto-hide errors after 6 seconds
   useEffect(() => {
@@ -130,6 +182,68 @@ export default function AddMockExam() {
       newQuestions[questionIndex] = { ...currentQuestion, ...buildQuestionPicturesPayload(pictures) };
       return { ...prev, questions: newQuestions };
     });
+  };
+
+  /** After removing a middle/extra slot, shift UI state keys so slot N matches image N (lastIndexOf parses qIdx 10+). */
+  const reindexQuestionImageSlotKeys = (prev, questionIndex, removedImageIndex) => {
+    const next = {};
+    for (const [key, val] of Object.entries(prev)) {
+      const lastUs = key.lastIndexOf('_');
+      if (lastUs <= 0) {
+        next[key] = val;
+        continue;
+      }
+      const q = Number(key.slice(0, lastUs));
+      const idx = Number(key.slice(lastUs + 1));
+      if (Number.isNaN(q) || Number.isNaN(idx)) {
+        next[key] = val;
+        continue;
+      }
+      if (q !== questionIndex) {
+        next[key] = val;
+        continue;
+      }
+      if (idx === removedImageIndex) continue;
+      if (idx > removedImageIndex) {
+        next[`${questionIndex}_${idx - 1}`] = val;
+      } else {
+        next[key] = val;
+      }
+    }
+    return next;
+  };
+
+  const reindexQuestionImageErrors = (prev, questionIndex, removedImageIndex) => {
+    const next = { ...prev };
+    delete next[`question_${questionIndex}_image_${removedImageIndex}`];
+    const errPrefix = `question_${questionIndex}_image_`;
+    const movers = Object.keys(next)
+      .filter((k) => k.startsWith(errPrefix))
+      .map((k) => {
+        const idx = Number(k.slice(errPrefix.length));
+        return { k, idx };
+      })
+      .filter(({ idx }) => !Number.isNaN(idx) && idx > removedImageIndex)
+      .sort((a, b) => a.idx - b.idx);
+    for (const { k, idx } of movers) {
+      const v = next[k];
+      delete next[k];
+      next[`question_${questionIndex}_image_${idx - 1}`] = v;
+    }
+    return next;
+  };
+
+  const reindexDragOverForQuestion = (dragOverIndex, questionIndex, removedImageIndex) => {
+    if (dragOverIndex == null || dragOverIndex === '') return dragOverIndex;
+    const key = String(dragOverIndex);
+    const lastUs = key.lastIndexOf('_');
+    if (lastUs <= 0) return dragOverIndex;
+    const q = Number(key.slice(0, lastUs));
+    const idx = Number(key.slice(lastUs + 1));
+    if (Number.isNaN(q) || Number.isNaN(idx) || q !== questionIndex) return dragOverIndex;
+    if (idx === removedImageIndex) return null;
+    if (idx > removedImageIndex) return `${questionIndex}_${idx - 1}`;
+    return dragOverIndex;
   };
 
   // Handle image upload
@@ -255,7 +369,12 @@ export default function AddMockExam() {
   const removeImageContainer = (questionIndex, imageIndex) => {
     const currentPictures = getQuestionPictures(formData.questions[questionIndex]);
     if (imageIndex === 0 || currentPictures.length <= 1) return;
-    updateQuestionPictures(questionIndex, currentPictures.filter((_, idx) => idx !== imageIndex));
+    const nextPictures = currentPictures.filter((_, idx) => idx !== imageIndex);
+    updateQuestionPictures(questionIndex, nextPictures);
+    setImagePreviews((prev) => reindexQuestionImageSlotKeys(prev, questionIndex, imageIndex));
+    setUploadingImages((prev) => reindexQuestionImageSlotKeys(prev, questionIndex, imageIndex));
+    setErrors((prev) => reindexQuestionImageErrors(prev, questionIndex, imageIndex));
+    setDragOverIndex((d) => reindexDragOverForQuestion(d, questionIndex, imageIndex));
   };
 
   // Drag and drop handlers
@@ -493,7 +612,7 @@ export default function AddMockExam() {
       return;
     }
 
-    // Check for duplicate course, courseType, and mock exam combination
+    // Check for duplicate course, courseType, lesson, and center combination
     const courseTrimmed = selectedCourse.trim();
     const courseTypeTrimmed = selectedCourseType ? selectedCourseType.trim() : '';
     const mockExamTrimmed = selectedMockExam.trim();
@@ -505,11 +624,12 @@ export default function AddMockExam() {
         const meLesson = (mockExam.lesson || '').trim();
         return meCourse === courseTrimmed && 
                (meCourseType || '') === courseTypeTrimmed && 
-               meLesson === mockExamTrimmed;
+               meLesson === mockExamTrimmed &&
+               centersMatchDuplicateClient(selectedCenter, mockExam.center);
       }
     );
     if (duplicateMockExam) {
-      newErrors.general = '❌ A mock exam with this course, course type, and mock exam already exists';
+      newErrors.general = '❌ A mock exam with this course, course type, lesson, and center already exists';
       setErrors(newErrors);
       
       // Clear error after 6 seconds
@@ -532,6 +652,7 @@ export default function AddMockExam() {
       comment: formData.comment ? formData.comment.trim() : '',
       course: courseTrimmed,
       courseType: courseTypeTrimmed || null,
+      center: selectedCenter.trim() || null,
       lesson: mockExamTrimmed,
       mock_exam_type: formData.mock_exam_type || 'questions',
       deadline_type: formData.deadline_type,
@@ -583,6 +704,49 @@ export default function AddMockExam() {
           boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
         }}>
           <form onSubmit={handleSubmit}>
+            <div
+              style={{
+                marginBottom: '24px',
+                padding: '18px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+                border: '1.5px solid #ddd6fe',
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ fontWeight: 700, color: '#4c1d95', marginBottom: '8px', fontSize: '1rem', width: '100%' }}>
+                Import from another mock exam
+              </div>
+              <p style={{ margin: '0 0 14px', fontSize: '0.88rem', color: '#5b21b6', lineHeight: 1.45, maxWidth: '520px' }}>
+                Copy fields and questions from an existing mock exam. Edit before saving — nothing is stored until you submit.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportSelectedId('');
+                  setImportModalOpen(true);
+                }}
+                style={{
+                  padding: '12px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: '0.95rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(124, 58, 237, 0.35)',
+                  width: '100%',
+                  maxWidth: '320px',
+                }}
+              >
+                Choose mock exam to import…
+              </button>
+            </div>
+
             {/* Mock Exam Course */}
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', textAlign: 'left' }}>
@@ -600,6 +764,7 @@ export default function AddMockExam() {
                 onToggle={() => {
                   setCourseDropdownOpen(!courseDropdownOpen);
                   setCourseTypeDropdownOpen(false);
+                  setCenterDropdownOpen(false);
                 }}
                 onClose={() => setCourseDropdownOpen(false)}
                 showAllOption={true}
@@ -629,6 +794,7 @@ export default function AddMockExam() {
                 onToggle={() => {
                   setCourseTypeDropdownOpen(!courseTypeDropdownOpen);
                   setCourseDropdownOpen(false);
+                  setCenterDropdownOpen(false);
                 }}
                 onClose={() => setCourseTypeDropdownOpen(false)}
               />
@@ -637,6 +803,25 @@ export default function AddMockExam() {
                   {errors.courseType}
                 </div>
               )}
+            </div>
+
+            {/* Mock Exam Center (optional) */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', textAlign: 'left' }}>
+                Mock Exam Center
+              </label>
+              <CenterSelect
+                selectedCenter={selectedCenter}
+                onCenterChange={setSelectedCenter}
+                required={false}
+                isOpen={centerDropdownOpen}
+                onToggle={() => {
+                  setCenterDropdownOpen(!centerDropdownOpen);
+                  setCourseDropdownOpen(false);
+                  setCourseTypeDropdownOpen(false);
+                }}
+                onClose={() => setCenterDropdownOpen(false)}
+              />
             </div>
 
             {/* Mock Exam */}
@@ -1039,7 +1224,10 @@ export default function AddMockExam() {
                   <div style={{ fontSize: '0.875rem', color: '#6c757d', marginBottom: '8px' }}>
                     Max size: 10 MB
                   </div>
-                  {getQuestionPictures(question).map((questionImage, imageIdx) => {
+                  {(() => {
+                    const questionPictures = getQuestionPictures(question);
+                    return questionPictures.map((questionImage, imageIdx) => {
+                    const isLastImageSlot = imageIdx === questionPictures.length - 1;
                     const imageKey = `${qIdx}_${imageIdx}`;
                     const hasImage = !!questionImage || !!imagePreviews[imageKey];
                     return (
@@ -1068,12 +1256,13 @@ export default function AddMockExam() {
                         )}
                         <div className="image-buttons-container" style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', width: '100%', marginTop: '8px' }}>
                           {imageIdx > 0 && <button type="button" onClick={() => removeImageContainer(qIdx, imageIdx)} style={{ padding: '8px 16px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}><Image src="/trash2.svg" alt="Remove" width={18} height={18} style={{ display: 'inline-block' }} />Remove</button>}
-                          <button type="button" onClick={() => addImageContainer(qIdx)} style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}><Image src="/plus.svg" alt="Add" width={18} height={18} style={{ display: 'inline-block' }} />Add</button>
+                          {isLastImageSlot && <button type="button" onClick={() => addImageContainer(qIdx)} style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}><Image src="/plus.svg" alt="Add" width={18} height={18} style={{ display: 'inline-block' }} />Add</button>}
                         </div>
                         {errors[`question_${qIdx}_image_${imageIdx}`] && <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>{errors[`question_${qIdx}_image_${imageIdx}`]}</div>}
                       </div>
                     );
-                  })}
+                  });
+                  })()}
                 </div>
 
                 {/* Question Text Input (after image) */}
@@ -1371,6 +1560,22 @@ export default function AddMockExam() {
         </div>
       </div>
 
+      <ImportExistingOnlineItemModal
+        open={importModalOpen}
+        onClose={() => {
+          if (!importApplyLoading) setImportModalOpen(false);
+        }}
+        title="Import mock exam"
+        description="Pick a mock exam to copy into this form. Edit before saving."
+        options={importMockExamOptions}
+        selectedValue={importSelectedId}
+        onSelectedValueChange={setImportSelectedId}
+        onApply={handleImportApply}
+        applyLabel="Load"
+        emptyMessage="No mock exams found in the system."
+        applyLoading={importApplyLoading}
+      />
+
       <style jsx>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
@@ -1400,14 +1605,8 @@ export default function AddMockExam() {
             margin-top: 8px !important;
           }
           .answer-buttons-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           .image-buttons-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           .add-question-container {
             flex-direction: row !important;
@@ -1415,9 +1614,6 @@ export default function AddMockExam() {
             justify-content: flex-end !important;
           }
           .add-question-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           .question-section > div:first-child {
             flex-direction: column !important;
@@ -1460,14 +1656,8 @@ export default function AddMockExam() {
             flex-wrap: wrap !important;
           }
           .answer-buttons-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           .image-buttons-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           @media (max-width: 360px) {
             .answer-buttons-container {

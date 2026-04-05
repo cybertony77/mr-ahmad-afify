@@ -108,9 +108,12 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Name is required' });
       }
 
-      // Validate payment_state
-      if (!payment_state || (payment_state !== 'paid' && payment_state !== 'free' && payment_state !== 'free_if_attended')) {
-        return res.status(400).json({ error: 'Video Payment State is required and must be "paid", "free", or "free_if_attended"' });
+      const allowedPaymentStatesPost = ['paid', 'free', 'free_if_homework_done', 'free_if_attended'];
+      if (!payment_state || !allowedPaymentStatesPost.includes(payment_state)) {
+        return res.status(400).json({
+          error:
+            'Video Payment State is required and must be "paid", "free", "free_if_homework_done", or "free_if_attended"',
+        });
       }
 
       // Handle both old format (video_urls) and new format (videos array)
@@ -226,9 +229,12 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Name is required' });
       }
 
-      // Validate payment_state
-      if (!payment_state || (payment_state !== 'paid' && payment_state !== 'free' && payment_state !== 'free_if_attended')) {
-        return res.status(400).json({ error: 'Video Payment State is required and must be "paid", "free", or "free_if_attended"' });
+      const allowedPaymentStatesPut = ['paid', 'free', 'free_if_homework_done', 'free_if_attended'];
+      if (!payment_state || !allowedPaymentStatesPut.includes(payment_state)) {
+        return res.status(400).json({
+          error:
+            'Video Payment State is required and must be "paid", "free", "free_if_homework_done", or "free_if_attended"',
+        });
       }
 
       // Handle both old format (video_urls) and new format (videos array)

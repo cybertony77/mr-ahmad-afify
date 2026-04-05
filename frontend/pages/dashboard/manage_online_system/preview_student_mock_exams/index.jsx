@@ -5,6 +5,7 @@ import MockExamPerformanceChart from '../../../../components/MockExamPerformance
 import { useStudents, useStudent } from '../../../../lib/api/students';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
+import { itemCenterMatchesStudentMainCenter } from '../../../../lib/studentCenterMatch';
 import Image from 'next/image';
 
 export default function PreviewStudentMockExams() {
@@ -52,17 +53,16 @@ export default function PreviewStudentMockExams() {
 
   const allMockExams = allMockExamsData?.mockExams || [];
 
-  // Get active lessons from Activated mock exams
   const activeLessons = useMemo(() => {
     const lessonSet = new Set();
-    allMockExams.forEach(mockExam => {
+    const mainCenter = student?.main_center;
+    allMockExams.forEach((mockExam) => {
+      if (!itemCenterMatchesStudentMainCenter(mockExam.center, mainCenter)) return;
       const itemState = mockExam.state || mockExam.account_state || 'Activated';
-      if (itemState === 'Activated') {
-        if (mockExam.lesson) lessonSet.add(mockExam.lesson);
-      }
+      if (itemState === 'Activated' && mockExam.lesson) lessonSet.add(mockExam.lesson);
     });
     return lessonSet;
-  }, [allMockExams]);
+  }, [allMockExams, student?.main_center]);
 
   // Fetch mock exam performance chart data using API endpoint
   const { data: performanceData, isLoading: isChartLoading } = useQuery({

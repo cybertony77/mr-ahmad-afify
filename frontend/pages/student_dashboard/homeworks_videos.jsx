@@ -10,6 +10,7 @@ import { useSystemConfig } from '../../lib/api/system';
 import StudentLessonSelect from '../../components/StudentLessonSelect';
 import NeedHelp from '../../components/NeedHelp';
 import R2VideoPlayer from '../../components/R2VideoPlayer';
+import YoutubeEmbedWithProgress from '../../components/YoutubeEmbedWithProgress';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
 
@@ -63,6 +64,9 @@ export default function HomeworksVideos() {
   const videoContainerRef = useRef(null);
   const videoStartTimeRef = useRef(null); // Track when video was opened
   const isClosingVideoRef = useRef(false); // Prevent multiple close calls
+  const r2CompletedRef = useRef(false); // R2: >= 90% watched
+  const selectedVideoRef = useRef(null);
+  const vhcViewsDecrementDoneRef = useRef(false);
   const [vhcPopupOpen, setVhcPopupOpen] = useState(false);
   const [vhc, setVhc] = useState('');
   const [vhcError, setVhcError] = useState('');
@@ -161,10 +165,26 @@ export default function HomeworksVideos() {
     return lessonData && lessonData.attended === true;
   };
 
+  /** Unlock when lessons[lessonName].hwDone exists and is not false (needs VHC otherwise). */
+  const checkLessonHomeworkDoneForVideo = (lessonName) => {
+    if (!studentData?.lessons || !lessonName) return false;
+    const lessonData = studentData.lessons[lessonName];
+    if (!lessonData || typeof lessonData !== 'object') return false;
+    if (!Object.prototype.hasOwnProperty.call(lessonData, 'hwDone')) return false;
+    if (lessonData.hwDone === false) return false;
+    return true;
+  };
+
   // Helper function to check if video is unlocked
   const isVideoUnlocked = (session) => {
     if (session.payment_state === 'free') {
       return true; // Free videos are always unlocked
+    } else if (session.payment_state === 'free_if_homework_done') {
+      if (session._isFreeIfHomeworkDone !== undefined) {
+        return session._hwDoneUnlocks === true;
+      }
+      const lessonName = session.lesson;
+      return checkLessonHomeworkDoneForVideo(lessonName);
     } else if (session.payment_state === 'free_if_attended') {
       // Check if student attended this lesson
       // Use API flag if available, otherwise check student data
@@ -281,6 +301,16 @@ export default function HomeworksVideos() {
     }
   }, [searchInput, searchTerm]);
 
+  useEffect(() => {
+    selectedVideoRef.current = selectedVideo;
+  }, [selectedVideo]);
+
+  useEffect(() => {
+    if (videoPopupOpen) {
+      vhcViewsDecrementDoneRef.current = false;
+    }
+  }, [videoPopupOpen, selectedVideo?._id]);
+
   // Handle search
   const handleSearch = () => {
     const trimmedSearch = searchInput.trim();
@@ -306,6 +336,51 @@ export default function HomeworksVideos() {
     }
   };
 
+  const tryDecrementVhcViewsOnWatchProgress = useCallback(async () => {
+    if (vhcViewsDecrementDoneRef.current) return;
+    const v = selectedVideoRef.current;
+    if (!v?.vhc_id || v.code_settings !== 'number_of_views') return;
+    vhcViewsDecrementDoneRef.current = true;
+    try {
+      const decrementResponse = await apiClient.post('/api/vhc/decrement-views', {
+        vhc_id: v.vhc_id
+      });
+      if (decrementResponse.data.success) {
+        const sessionId = typeof v._id === 'string' ? v._id : v._id.toString();
+        setUnlockedSessions((prev) => {
+          const updatedUnlocked = new Map(prev);
+          const sessionInfo = updatedUnlocked.get(sessionId);
+          if (sessionInfo) {
+            sessionInfo.number_of_views = decrementResponse.data.number_of_views;
+            if (sessionInfo.number_of_views <= 0) {
+              updatedUnlocked.delete(sessionId);
+            } else {
+              updatedUnlocked.set(sessionId, sessionInfo);
+            }
+          }
+          return updatedUnlocked;
+        });
+      } else {
+        vhcViewsDecrementDoneRef.current = false;
+      }
+    } catch (err) {
+      console.error('Failed to decrement VHC views:', err);
+      vhcViewsDecrementDoneRef.current = false;
+      if (err.response?.data?.error?.includes('no views remaining')) {
+        const sessionId = typeof v._id === 'string' ? v._id : v._id.toString();
+        setUnlockedSessions((prev) => {
+          const next = new Map(prev);
+          next.delete(sessionId);
+          return next;
+        });
+        setVhcError('❌ Sorry, This code has no views remaining');
+      }
+    }
+  }, []);
+
+  const handleR2VideoCompleteHomework = useCallback(() => {
+    r2CompletedRef.current = true;
+  }, []);
 
   // Open video popup
   const openVideoPopup = async (session, videoId, videoIndex) => {
@@ -314,7 +389,7 @@ export default function HomeworksVideos() {
     
     // Check if video is unlocked
     if (isVideoUnlocked(session)) {
-      // Video is unlocked - check deadline date and decrement views if needed
+      // Video is unlocked - check deadline date (views decrement after >=10% watch via player)
       const sessionId = session._id?.toString() || session._id;
       const unlockedInfo = unlockedSessions.get(sessionId);
       
@@ -335,41 +410,6 @@ export default function HomeworksVideos() {
             return;
           }
         }
-        
-        // Decrement views if code_settings is 'number_of_views'
-        if (unlockedInfo.code_settings === 'number_of_views' && unlockedInfo.vhc_id) {
-          try {
-            const decrementResponse = await apiClient.post('/api/vhc/decrement-views', {
-              vhc_id: unlockedInfo.vhc_id
-            });
-            
-            if (decrementResponse.data.success) {
-              // Update unlocked sessions with new view count
-              const updatedUnlocked = new Map(unlockedSessions);
-              const sessionInfo = updatedUnlocked.get(sessionId);
-              if (sessionInfo) {
-                sessionInfo.number_of_views = decrementResponse.data.number_of_views;
-                if (sessionInfo.number_of_views <= 0) {
-                  // No views remaining - remove from unlocked
-                  updatedUnlocked.delete(sessionId);
-                } else {
-                  updatedUnlocked.set(sessionId, sessionInfo);
-                }
-                setUnlockedSessions(updatedUnlocked);
-              }
-            }
-          } catch (err) {
-            console.error('Failed to decrement views:', err);
-            if (err.response?.data?.error?.includes('no views remaining')) {
-              // Remove from unlocked sessions
-              const newUnlocked = new Map(unlockedSessions);
-              newUnlocked.delete(sessionId);
-              setUnlockedSessions(newUnlocked);
-              setVhcError('❌ Sorry, This code has no views remaining');
-              return;
-            }
-          }
-        }
       }
       
       // Video is unlocked - open directly
@@ -384,6 +424,7 @@ export default function HomeworksVideos() {
       });
       setVideoPopupOpen(true);
       videoStartTimeRef.current = Date.now();
+      r2CompletedRef.current = false;
     } else {
       // Video is locked - require VHC
       setPendingVideo({ session, videoId, videoIndex, videoType });
@@ -447,27 +488,9 @@ export default function HomeworksVideos() {
         });
         setVideoPopupOpen(true);
         videoStartTimeRef.current = Date.now();
+        r2CompletedRef.current = false;
         setPendingVideo(null);
         setVhc('');
-        
-        // Decrement views if code_settings is 'number_of_views'
-        if (response.data.code_settings === 'number_of_views' && response.data.vhc_id) {
-          try {
-            await apiClient.post('/api/vhc/decrement-views', {
-              vhc_id: response.data.vhc_id
-            });
-            // Update unlocked sessions with new view count
-            const updatedUnlocked = new Map(newUnlocked);
-            const sessionInfo = updatedUnlocked.get(sessionId);
-            if (sessionInfo && sessionInfo.number_of_views > 0) {
-              sessionInfo.number_of_views -= 1;
-              updatedUnlocked.set(sessionId, sessionInfo);
-              setUnlockedSessions(updatedUnlocked);
-            }
-          } catch (err) {
-            console.error('Failed to decrement views:', err);
-          }
-        }
       } else {
         setVhcError(response.data.error || '❌ Invalid VHC code');
       }
@@ -493,19 +516,23 @@ export default function HomeworksVideos() {
       return;
     }
     
-    // Only mark view_homework_video if video was actually watched
-    // (at least 5 seconds to prevent accidental closes)
+    // YouTube: at least 5 seconds; R2: >= 90% (completion callback)
     const minWatchTime = 5000; // 5 seconds in milliseconds
     const watchTime = videoStartTimeRef.current ? Date.now() - videoStartTimeRef.current : 0;
     
     // Close popup immediately (UI feedback)
     const currentVideo = selectedVideo;
+    const isR2Video = currentVideo?.video_type === 'r2';
+    const r2Completed = r2CompletedRef.current;
     setVideoPopupOpen(false);
     setSelectedVideo(null);
     videoStartTimeRef.current = null;
+    r2CompletedRef.current = false;
+    
+    const videoWasWatched = isR2Video ? r2Completed : (watchTime >= minWatchTime);
     
     // Call watch-homework-video API to set view_homework_video=true and mark attendance
-    if (currentVideo && profile?.id && currentVideo._id && watchTime >= minWatchTime) {
+    if (currentVideo && profile?.id && currentVideo._id && videoWasWatched) {
       isClosingVideoRef.current = true;
       try {
         // Convert _id to string if it's an ObjectId
@@ -1027,25 +1054,43 @@ export default function HomeworksVideos() {
                 onDragStart={(e) => e.preventDefault()}
                 onSelectStart={(e) => e.preventDefault()}
               >
-                <iframe
-                  src={buildEmbedUrl(selectedVideo.video_ID || selectedVideo.video_ID_1 || '')}
-                  frameBorder="0"
-                  allow="encrypted-media; autoplay; fullscreen; picture-in-picture"
-                  allowFullScreen={true}
-                  playsInline={true}
-                  style={{
-                    width: '100%',
-                    height: 'auto',
-                    maxHeight: '100vh',
-                    aspectRatio: '16 / 9',
-                    border: 'none',
-                    outline: 'none'
-                  }}
-                  onContextMenu={(e) => e.preventDefault()}
-                  onDragStart={(e) => e.preventDefault()}
-                  onSelectStart={(e) => e.preventDefault()}
-                  draggable={false}
-                />
+                {selectedVideo.video_type === 'r2' ? (
+                  <R2VideoPlayer
+                    r2Key={selectedVideo.video_ID}
+                    videoId={selectedVideo._id}
+                    onComplete={handleR2VideoCompleteHomework}
+                    onMilestonePercent={
+                      selectedVideo.code_settings === 'number_of_views' && selectedVideo.vhc_id
+                        ? tryDecrementVhcViewsOnWatchProgress
+                        : undefined
+                    }
+                  />
+                ) : selectedVideo.code_settings === 'number_of_views' && selectedVideo.vhc_id ? (
+                  <YoutubeEmbedWithProgress
+                    youtubeVideoId={selectedVideo.video_ID || selectedVideo.video_ID_1 || ''}
+                    onThresholdReached={tryDecrementVhcViewsOnWatchProgress}
+                  />
+                ) : (
+                  <iframe
+                    src={buildEmbedUrl(selectedVideo.video_ID || selectedVideo.video_ID_1 || '')}
+                    frameBorder="0"
+                    allow="encrypted-media; autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen={true}
+                    playsInline={true}
+                    style={{
+                      width: '100%',
+                      height: 'auto',
+                      maxHeight: '100vh',
+                      aspectRatio: '16 / 9',
+                      border: 'none',
+                      outline: 'none'
+                    }}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onDragStart={(e) => e.preventDefault()}
+                    onSelectStart={(e) => e.preventDefault()}
+                    draggable={false}
+                  />
+                )}
               </div>
 
               {/* Video Description */}

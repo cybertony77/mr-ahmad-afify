@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../../lib/authMiddleware';
 import { verifySignature } from '../../../../lib/hmac';
+import { itemCenterMatchesStudentMainCenter } from '../../../../lib/studentCenterMatch';
 
 function loadEnvConfig() {
   try {
@@ -86,6 +87,7 @@ export default async function handler(req, res) {
     // Get student's course and courseType
     const studentCourse = student.course;
     const studentCourseType = student.courseType;
+    const studentMainCenter = student.main_center;
     
     if (!studentCourse) {
       // If student has no course, return empty array
@@ -151,8 +153,10 @@ export default async function handler(req, res) {
       const courseTypeMatch = !meCourseType || 
                              !studentCourseTypeTrimmed ||
                              meCourseType.toLowerCase() === studentCourseTypeTrimmed.toLowerCase();
+
+      const centerMatch = itemCenterMatchesStudentMainCenter(me.center, studentMainCenter);
       
-      return courseMatch && courseTypeMatch;
+      return courseMatch && courseTypeMatch && centerMatch;
     });
 
     // List ALL available mock exams for the student in the chart

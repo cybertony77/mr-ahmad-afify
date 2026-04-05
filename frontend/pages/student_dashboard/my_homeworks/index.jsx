@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import Image from 'next/image';
 import Title from '../../../components/Title';
@@ -11,6 +11,7 @@ import HomeworkPerformanceChart from '../../../components/HomeworkPerformanceCha
 import StudentLessonSelect from '../../../components/StudentLessonSelect';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
+import { clientItemVisibleByCenter } from '../../../lib/studentCenterMatch';
 
 // Input with Button Component (matching manage online system style)
 function InputWithButton(props) {
@@ -31,7 +32,6 @@ function InputWithButton(props) {
     />
   );
 }
-
 
 export default function MyHomeworks() {
   const { data: systemConfig } = useSystemConfig();
@@ -82,9 +82,12 @@ export default function MyHomeworks() {
 
   const homeworks = homeworksData?.homeworks || [];
 
-  // Hide deactivated homeworks from students
-  const visibleHomeworks = homeworks.filter(
-    (homework) => (homework.state || homework.account_state || 'Activated') !== 'Deactivated'
+  const centerFilteredHomeworks = useMemo(
+    () =>
+      homeworks
+        .filter((homework) => (homework.state || homework.account_state || 'Activated') !== 'Deactivated')
+        .filter((hw) => clientItemVisibleByCenter(hw.center, profile?.main_center)),
+    [homeworks, profile?.main_center]
   );
 
   // Search and filter states
@@ -99,7 +102,7 @@ export default function MyHomeworks() {
     const studentCourse = (profile?.course || '').trim();
     const studentCourseType = (profile?.courseType || '').trim();
     
-    visibleHomeworks.forEach(homework => {
+    centerFilteredHomeworks.forEach(homework => {
       if (homework.lesson && homework.lesson.trim()) {
         // Check if homework matches student's course and courseType
         const homeworkCourse = (homework.course || '').trim();
@@ -126,7 +129,7 @@ export default function MyHomeworks() {
   const availableLessons = getAvailableLessons();
 
   // Filter homeworks based on search and filters
-  const filteredHomeworks = visibleHomeworks.filter(homework => {
+  const filteredHomeworks = centerFilteredHomeworks.filter(homework => {
     // Search filter (by lesson name - case-insensitive)
     if (searchTerm.trim()) {
       const lessonName = homework.lesson_name || '';
@@ -190,7 +193,7 @@ export default function MyHomeworks() {
 
   // Only show chart lessons that have at least one Activated homework
   const activeLessons = new Set(
-    visibleHomeworks
+    centerFilteredHomeworks
       .map(hw => hw.lesson)
       .filter(Boolean)
   );
@@ -263,11 +266,11 @@ export default function MyHomeworks() {
 
   // Check which homeworks exist in online_homeworks array
   useEffect(() => {
-    if (!profile?.id || homeworks.length === 0 || !Array.isArray(onlineHomeworks)) return;
+    if (!profile?.id || centerFilteredHomeworks.length === 0 || !Array.isArray(onlineHomeworks)) return;
 
     const checkCompletions = () => {
       const completed = new Set();
-      for (const homework of homeworks) {
+      for (const homework of centerFilteredHomeworks) {
         // Check if homework exists in online_homeworks array
         const exists = onlineHomeworks.some(ohw => {
           const hwId = ohw.homework_id?.toString();
@@ -282,7 +285,7 @@ export default function MyHomeworks() {
     };
 
     checkCompletions();
-  }, [profile?.id, homeworks, onlineHomeworks]);
+  }, [profile?.id, centerFilteredHomeworks, onlineHomeworks]);
 
   // Helper function to check if hwDone indicates completion for a given lesson
   // Returns true if hwDone is true, "Not Completed", or "No Homework" (protected values)
@@ -371,12 +374,12 @@ export default function MyHomeworks() {
   /*
   // Check deadlines and update student lessons if needed (only for activated homeworks)
   useEffect(() => {
-    if (!profile?.id || visibleHomeworks.length === 0) return;
+    if (!profile?.id || centerFilteredHomeworks.length === 0) return;
     // Allow the check to proceed even if lessons is undefined - we'll treat it as empty object
     // The API will create the lesson if it doesn't exist
 
     const checkDeadlines = async () => {
-      for (const homework of visibleHomeworks) {
+      for (const homework of centerFilteredHomeworks) {
         // Only check if homework has deadline and is not completed
         if (
           homework.deadline_type === 'with_deadline' &&
@@ -674,7 +677,7 @@ export default function MyHomeworks() {
         </div>
 
         {/* Filters */}
-        {homeworks.length > 0 && (
+        {centerFilteredHomeworks.length > 0 && (
           <div className="filters-container" style={{
             background: 'white',
             borderRadius: 16,
@@ -721,7 +724,7 @@ export default function MyHomeworks() {
           {/* Homeworks List */}
           {filteredHomeworks.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
-              {homeworks.length === 0 ? '❌ No homeworks available.' : '❌ No homeworks match your filters.'}
+              {centerFilteredHomeworks.length === 0 ? '❌ No homeworks available.' : '❌ No homeworks match your filters.'}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

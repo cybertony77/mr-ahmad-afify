@@ -107,6 +107,38 @@ export default function MyInfo() {
     staleTime: 30 * 1000,
   });
 
+  const { data: homeworkPerformanceData, isLoading: homeworkPerfLoading, isSuccess: homeworkPerfOk, isError: homeworkPerfErr } = useQuery({
+    queryKey: ['homework-performance', studentId],
+    queryFn: async () => {
+      if (!studentId) return { chartData: [] };
+      try {
+        const response = await apiClient.get(`/api/students/${studentId}/homework-performance`);
+        return response.data || { chartData: [] };
+      } catch (error) {
+        console.error('Error fetching homework performance:', error);
+        return { chartData: [] };
+      }
+    },
+    enabled: !!studentId,
+    staleTime: 30 * 1000,
+  });
+
+  const { data: quizPerformanceData, isLoading: quizPerfLoading, isSuccess: quizPerfOk, isError: quizPerfErr } = useQuery({
+    queryKey: ['quiz-performance', studentId],
+    queryFn: async () => {
+      if (!studentId) return { chartData: [] };
+      try {
+        const response = await apiClient.get(`/api/students/${studentId}/quiz-performance`);
+        return response.data || { chartData: [] };
+      } catch (error) {
+        console.error('Error fetching quiz performance:', error);
+        return { chartData: [] };
+      }
+    },
+    enabled: !!studentId,
+    staleTime: 30 * 1000,
+  });
+
   // Debug logging for React Query status
   useEffect(() => {
     if (student && studentId) {
@@ -1030,6 +1062,10 @@ export default function MyInfo() {
               mockExams={student.mockExams || []} 
               onlineMockExams={student.online_mock_exams || []}
               mockExamChartData={mockExamPerformanceData?.chartData}
+              homeworkChartData={homeworkPerfErr ? [] : (homeworkPerfOk ? (homeworkPerformanceData?.chartData ?? []) : undefined)}
+              homeworkChartLoading={homeworkPerfLoading}
+              quizChartData={quizPerfErr ? [] : (quizPerfOk ? (quizPerformanceData?.chartData ?? []) : undefined)}
+              quizChartLoading={quizPerfLoading}
             />
             <NeedHelp style={{ padding: '16px', marginTop: '16px' }} />
           </div>

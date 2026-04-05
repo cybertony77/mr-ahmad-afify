@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import Image from 'next/image';
 import Title from '../../../components/Title';
@@ -11,6 +11,7 @@ import MockExamPerformanceChart from '../../../components/MockExamPerformanceCha
 import MockExamSelect from '../../../components/MockExamSelect';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
+import { clientItemVisibleByCenter } from '../../../lib/studentCenterMatch';
 
 // Input with Button Component (matching manage online system style)
 function InputWithButton(props) {
@@ -31,7 +32,6 @@ function InputWithButton(props) {
     />
   );
 }
-
 
 export default function MyMockExams() {
   const { data: systemConfig } = useSystemConfig();
@@ -81,9 +81,12 @@ export default function MyMockExams() {
 
   const mockExams = mockExamsData?.mockExams || [];
 
-  // Hide deactivated mock exams from students
-  const visibleMockExams = mockExams.filter(
-    (mockExam) => (mockExam.state || mockExam.account_state || 'Activated') !== 'Deactivated'
+  const centerFilteredMockExams = useMemo(
+    () =>
+      mockExams
+        .filter((mockExam) => (mockExam.state || mockExam.account_state || 'Activated') !== 'Deactivated')
+        .filter((me) => clientItemVisibleByCenter(me.center, profile?.main_center)),
+    [mockExams, profile?.main_center]
   );
 
   // Search and filter states
@@ -97,7 +100,7 @@ export default function MyMockExams() {
   // Just extract unique lesson names to show in the filter dropdown
   const getAvailableLessons = () => {
     const lessonSet = new Set();
-    visibleMockExams.forEach(mockExam => {
+    centerFilteredMockExams.forEach(mockExam => {
       if (mockExam.lesson && mockExam.lesson.trim()) {
         lessonSet.add(mockExam.lesson);
       }
@@ -114,7 +117,7 @@ export default function MyMockExams() {
   const availableLessons = getAvailableLessons();
 
   // Filter mock exams based on search and filters
-  const filteredMockExams = visibleMockExams.filter(mockExam => {
+  const filteredMockExams = centerFilteredMockExams.filter(mockExam => {
     // Search filter (by lesson name - case-insensitive)
     if (searchTerm.trim()) {
       const lessonName = mockExam.lesson_name || '';
@@ -178,8 +181,8 @@ export default function MyMockExams() {
 
   // Only show chart lessons that have at least one Activated mock exam
   const activeMockExamLessons = new Set(
-    mockExams
-      .filter(exam => (exam.state || exam.account_state || 'Activated') === 'Activated' && exam.lesson)
+    centerFilteredMockExams
+      .filter(exam => exam.lesson)
       .map(exam => exam.lesson)
   );
 
@@ -253,11 +256,11 @@ export default function MyMockExams() {
 
   // Check which mock exams exist in online_mock_exams array
   useEffect(() => {
-    if (!profile?.id || mockExams.length === 0 || !Array.isArray(onlineMockExams)) return;
+    if (!profile?.id || centerFilteredMockExams.length === 0 || !Array.isArray(onlineMockExams)) return;
 
     const checkCompletions = () => {
       const completed = new Set();
-      for (const mockExam of mockExams) {
+      for (const mockExam of centerFilteredMockExams) {
         // Check if mock exam exists in online_mock_exams array
         const exists = onlineMockExams.some(ome => {
           const meId = ome.mock_exam_id?.toString();
@@ -272,7 +275,7 @@ export default function MyMockExams() {
     };
 
     checkCompletions();
-  }, [profile?.id, mockExams, onlineMockExams]);
+  }, [profile?.id, centerFilteredMockExams, onlineMockExams]);
 
   // Helper function to get mock exam result for a given mock_exam_id
   const getMockExamResult = (mockExamId = null) => {
@@ -434,7 +437,7 @@ export default function MyMockExams() {
         </div>
 
         {/* Filters */}
-        {mockExams.length > 0 && (
+        {centerFilteredMockExams.length > 0 && (
           <div className="filters-container" style={{
             background: 'white',
             borderRadius: 16,
@@ -476,7 +479,7 @@ export default function MyMockExams() {
           {/* Mock Exams List */}
           {filteredMockExams.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
-              {mockExams.length === 0 ? '❌ No mock exams available.' : '❌ No mock exams match your filters.'}
+              {centerFilteredMockExams.length === 0 ? '❌ No mock exams available.' : '❌ No mock exams match your filters.'}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

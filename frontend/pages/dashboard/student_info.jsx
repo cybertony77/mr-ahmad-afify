@@ -215,6 +215,40 @@ export default function StudentInfo() {
     staleTime: 30 * 1000,
   });
 
+  const { data: homeworkPerformanceData, isLoading: homeworkPerfLoading, isSuccess: homeworkPerfOk, isError: homeworkPerfErr } = useQuery({
+    queryKey: ['homework-performance', mockExamStudentId, hasAuthToken, router.query.sig],
+    queryFn: async () => {
+      if (!mockExamStudentId) return { chartData: [] };
+      try {
+        const sigParam = !hasAuthToken && router.query.sig ? `?sig=${encodeURIComponent(router.query.sig)}` : '';
+        const response = await apiClient.get(`/api/students/${mockExamStudentId}/homework-performance${sigParam}`);
+        return response.data || { chartData: [] };
+      } catch (error) {
+        console.error('Error fetching homework performance:', error);
+        return { chartData: [] };
+      }
+    },
+    enabled: !!(mockExamStudentId && (hasAuthToken || isValidSignature)),
+    staleTime: 30 * 1000,
+  });
+
+  const { data: quizPerformanceData, isLoading: quizPerfLoading, isSuccess: quizPerfOk, isError: quizPerfErr } = useQuery({
+    queryKey: ['quiz-performance', mockExamStudentId, hasAuthToken, router.query.sig],
+    queryFn: async () => {
+      if (!mockExamStudentId) return { chartData: [] };
+      try {
+        const sigParam = !hasAuthToken && router.query.sig ? `?sig=${encodeURIComponent(router.query.sig)}` : '';
+        const response = await apiClient.get(`/api/students/${mockExamStudentId}/quiz-performance${sigParam}`);
+        return response.data || { chartData: [] };
+      } catch (error) {
+        console.error('Error fetching quiz performance:', error);
+        return { chartData: [] };
+      }
+    },
+    enabled: !!(mockExamStudentId && (hasAuthToken || isValidSignature)),
+    staleTime: 30 * 1000,
+  });
+
   // Get student profile picture - use searchId if authenticated, studentId if public
   const profilePictureStudentId = hasAuthToken ? searchId : studentId;
   const profilePictureSignature = !hasAuthToken && isValidSignature && router.query.sig ? String(router.query.sig).trim() : null;
@@ -1350,7 +1384,16 @@ export default function StudentInfo() {
         {/* Charts Tabs Section - Outside lessons container */}
         {currentStudent?.lessons && (
           <div style={{ marginTop: 24 }}>
-            <ChartTabs lessons={currentStudent.lessons} mockExams={currentStudent.mockExams} onlineMockExams={currentStudent.online_mock_exams} mockExamChartData={mockExamPerformanceData?.chartData} />
+            <ChartTabs
+              lessons={currentStudent.lessons}
+              mockExams={currentStudent.mockExams}
+              onlineMockExams={currentStudent.online_mock_exams}
+              mockExamChartData={mockExamPerformanceData?.chartData}
+              homeworkChartData={homeworkPerfErr ? [] : (homeworkPerfOk ? (homeworkPerformanceData?.chartData ?? []) : undefined)}
+              homeworkChartLoading={homeworkPerfLoading}
+              quizChartData={quizPerfErr ? [] : (quizPerfOk ? (quizPerformanceData?.chartData ?? []) : undefined)}
+              quizChartLoading={quizPerfLoading}
+            />
           </div>
         )}
         

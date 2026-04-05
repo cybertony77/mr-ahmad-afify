@@ -9,8 +9,8 @@ function loadEnvConfig() {
     const envPath = path.join(process.cwd(), '..', 'env.config');
     const envContent = fs.readFileSync(envPath, 'utf8');
     const envVars = {};
-    
-    envContent.split('\n').forEach(line => {
+
+    envContent.split('\n').forEach((line) => {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
         const index = trimmed.indexOf('=');
@@ -22,7 +22,7 @@ function loadEnvConfig() {
         }
       }
     });
-    
+
     return envVars;
   } catch (error) {
     console.log('⚠️  Could not read env.config, using process.env as fallback');
@@ -41,65 +41,53 @@ export default async function handler(req, res) {
 
   const { id } = req.query;
   const student_id = parseInt(id);
+  const { mock_exam_id } = req.query;
+
+  if (!mock_exam_id) {
+    return res.status(400).json({ error: 'mock_exam_id is required' });
+  }
 
   let client;
   try {
     client = await MongoClient.connect(MONGO_URI);
     const db = client.db(DB_NAME);
-    
-    // Verify authentication
+
     await authMiddleware(req);
 
-    // Get student data
     const student = await db.collection('students').findOne({ id: student_id });
     if (!student) {
       return res.status(404).json({ error: 'Student not found' });
     }
 
-    const onlineQuizzes = student.online_quizzes || [];
-    const mainCenter = student.main_center;
+    const mockExam = await db.collection('mock_exams').findOne({ _id: new ObjectId(mock_exam_id) });
+    if (!mockExam) {
+      return res.status(404).json({ error: 'Mock exam not found' });
+    }
 
-    const quizzesWithDetails = (
-      await Promise.all(
-        onlineQuizzes.map(async (quizResult) => {
-          try {
-            const quiz = await db.collection('quizzes').findOne({
-              _id: new ObjectId(quizResult.quiz_id),
-            });
-            if (!quiz) {
-              return null;
-            }
-            if (!itemCenterMatchesStudentMainCenter(quiz.center, mainCenter)) {
-              return null;
-            }
-            return {
-              ...quizResult,
-              quiz: {
-                _id: quiz._id,
-                lesson: quiz.lesson,
-                lesson_name: quiz.lesson_name,
-                week: quiz.week,
-                timer: quiz.timer,
-                questions: quiz.questions ? quiz.questions.length : 0,
-              },
-            };
-          } catch (err) {
-            console.error(`Error fetching quiz ${quizResult.quiz_id}:`, err);
-            return null;
-          }
-        })
-      )
-    ).filter(Boolean);
+    if (!itemCenterMatchesStudentMainCenter(mockExam.center, student.main_center)) {
+      return res.status(403).json({ error: 'This mock exam is not available for this student center' });
+    }
+
+    const onlineMockExams = student.online_mock_exams || [];
+    const mockExamIdStr = String(mock_exam_id);
+    const matchingResult = onlineMockExams.find(
+      (me) => me.mock_exam_id && String(me.mock_exam_id) === mockExamIdStr
+    );
+
+    if (!matchingResult) {
+      return res.status(404).json({ error: 'Mock exam result not found' });
+    }
 
     res.json({
       success: true,
-      quizzes: quizzesWithDetails,
+      mockExam,
+      result: matchingResult,
     });
   } catch (error) {
-    console.error('❌ Error fetching online quizzes:', error);
-    res.status(500).json({ 
-      error: 'Internal server error', 
-      details: error.message 
+    console.error('❌ Error fetching mock exam preview details:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      details: error.message,
     });
   } finally {
     if (client) {
@@ -107,4 +95,3 @@ export default async function handler(req, res) {
     }
   }
 }
-

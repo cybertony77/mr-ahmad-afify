@@ -2,6 +2,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../../lib/authMiddleware';
+import { itemCenterMatchesStudentMainCenter } from '../../../../lib/studentCenterMatch';
 
 function loadEnvConfig() {
   try {
@@ -56,37 +57,44 @@ export default async function handler(req, res) {
     }
 
     const onlineHomeworks = student.online_homeworks || [];
-    
-    // Fetch homework details for each homework_id
-    const homeworksWithDetails = await Promise.all(
-      onlineHomeworks.map(async (hwResult) => {
-        try {
-          const homework = await db.collection('homeworks').findOne({ 
-            _id: new ObjectId(hwResult.homework_id) 
-          });
-          return {
-            ...hwResult,
-            homework: homework ? {
-              _id: homework._id,
-              lesson_name: homework.lesson_name,
-              week: homework.week,
-              timer: homework.timer,
-              questions: homework.questions ? homework.questions.length : 0
-            } : null
-          };
-        } catch (err) {
-          console.error(`Error fetching homework ${hwResult.homework_id}:`, err);
-          return {
-            ...hwResult,
-            homework: null
-          };
-        }
-      })
-    );
+    const mainCenter = student.main_center;
 
-    res.json({ 
+    // Fetch homework details for each homework_id; omit items whose center does not match main_center
+    const homeworksWithDetails = (
+      await Promise.all(
+        onlineHomeworks.map(async (hwResult) => {
+          try {
+            const homework = await db.collection('homeworks').findOne({
+              _id: new ObjectId(hwResult.homework_id),
+            });
+            if (!homework) {
+              return null;
+            }
+            if (!itemCenterMatchesStudentMainCenter(homework.center, mainCenter)) {
+              return null;
+            }
+            return {
+              ...hwResult,
+              homework: {
+                _id: homework._id,
+                lesson: homework.lesson,
+                lesson_name: homework.lesson_name,
+                week: homework.week,
+                timer: homework.timer,
+                questions: homework.questions ? homework.questions.length : 0,
+              },
+            };
+          } catch (err) {
+            console.error(`Error fetching homework ${hwResult.homework_id}:`, err);
+            return null;
+          }
+        })
+      )
+    ).filter(Boolean);
+
+    res.json({
       success: true,
-      homeworks: homeworksWithDetails
+      homeworks: homeworksWithDetails,
     });
   } catch (error) {
     console.error('❌ Error fetching online homeworks:', error);

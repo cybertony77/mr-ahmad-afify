@@ -2,6 +2,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../lib/authMiddleware';
+import { duplicateCenterMongoFragment } from '../../../lib/onlineItemDuplicate';
 
 function loadEnvConfig() {
   try {
@@ -88,7 +89,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { lesson_name, timer, questions, lesson, course, courseType, quiz_type, deadline_type, deadline_date, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
+      const { lesson_name, timer, questions, lesson, course, courseType, center, quiz_type, deadline_type, deadline_date, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
 
       const effectiveQuizType = quiz_type || 'questions';
 
@@ -166,15 +167,19 @@ export default async function handler(req, res) {
       const courseTrimmed = course.trim();
       const courseTypeTrimmed = courseType ? courseType.trim() : '';
       const lessonTrimmed = lesson.trim();
+      const centerTrimmed = center && String(center).trim() !== '' ? String(center).trim() : null;
       
       const existingQuiz = await db.collection('quizzes').findOne({
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
-        lesson: lessonTrimmed
+        lesson: lessonTrimmed,
+        ...duplicateCenterMongoFragment(centerTrimmed),
       });
 
       if (existingQuiz) {
-        return res.status(400).json({ error: '❌ A quiz with this course, course type, and lesson already exists' });
+        return res.status(400).json({
+          error: '❌ A quiz with this course, course type, lesson, and center already exists',
+        });
       }
 
       // Normalize quiz state (default to "Activated")
@@ -187,6 +192,7 @@ export default async function handler(req, res) {
         lesson_name: lesson_name.trim(),
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
+        center: centerTrimmed,
         lesson: lessonTrimmed,
         quiz_type: effectiveQuizType,
         deadline_type: deadline_type || 'no_deadline',
@@ -226,7 +232,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'PUT') {
       const { id } = req.query;
-      const { lesson_name, timer, questions, lesson, course, courseType, quiz_type, deadline_type, deadline_date, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
+      const { lesson_name, timer, questions, lesson, course, courseType, center, quiz_type, deadline_type, deadline_date, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
 
       const effectiveQuizType = quiz_type || 'questions';
 
@@ -307,15 +313,19 @@ export default async function handler(req, res) {
       const courseTrimmed = course.trim();
       const courseTypeTrimmed = courseType ? courseType.trim() : '';
       const lessonTrimmed = lesson.trim();
+      const centerTrimmed = center && String(center).trim() !== '' ? String(center).trim() : null;
       
-      const existingQuiz = await db.collection('quizzes').findOne({ 
+      const existingQuiz = await db.collection('quizzes').findOne({
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
         lesson: lessonTrimmed,
-        _id: { $ne: new ObjectId(id) } // Exclude current quiz
+        ...duplicateCenterMongoFragment(centerTrimmed),
+        _id: { $ne: new ObjectId(id) }, // Exclude current quiz
       });
       if (existingQuiz) {
-        return res.status(400).json({ error: `❌ A quiz with this course, course type, and lesson already exists.` });
+        return res.status(400).json({
+          error: `❌ A quiz with this course, course type, lesson, and center already exists.`,
+        });
       }
 
       // Normalize quiz state if provided
@@ -327,6 +337,7 @@ export default async function handler(req, res) {
       const updateData = {
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
+        center: centerTrimmed,
         lesson: lessonTrimmed,
         lesson_name: lesson_name.trim(),
         quiz_type: effectiveQuizType,

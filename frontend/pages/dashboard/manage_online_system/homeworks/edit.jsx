@@ -1,14 +1,20 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import Title from '../../../../components/Title';
 import AttendanceLessonSelect from '../../../../components/AttendancelessonSelect';
 import CourseSelect from '../../../../components/CourseSelect';
 import CourseTypeSelect from '../../../../components/CourseTypeSelect';
+import CenterSelect from '../../../../components/CenterSelect';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
 import Image from 'next/image';
 import ZoomableImage from '../../../../components/ZoomableImage';
 import AccountStateSelect from '../../../../components/AccountStateSelect';
+import ImportExistingOnlineItemModal from '../../../../components/ImportExistingOnlineItemModal';
+import { formatHomeworkPickerLabel } from '../../../../lib/importOnlineItemLabels';
+import { buildHomeworkImportFormState } from '../../../../lib/importOnlineFormState';
+import { fetchImportedQuestionImageUrls } from '../../../../lib/fetchImportedQuestionImageUrls';
+import { centersMatchDuplicateClient } from '../../../../lib/onlineItemDuplicate';
 
 
 export default function EditHomework() {
@@ -50,6 +56,8 @@ export default function EditHomework() {
   const [courseTypeDropdownOpen, setCourseTypeDropdownOpen] = useState(false);
   const [selectedLesson, setSelectedLesson] = useState('');
   const [lessonDropdownOpen, setLessonDropdownOpen] = useState(false);
+  const [selectedCenter, setSelectedCenter] = useState('');
+  const [centerDropdownOpen, setCenterDropdownOpen] = useState(false);
   const [accountState, setAccountState] = useState('Activated');
   const [errors, setErrors] = useState({});
   const [uploadingImages, setUploadingImages] = useState({});
@@ -58,6 +66,9 @@ export default function EditHomework() {
   const [loadingImages, setLoadingImages] = useState({});
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const errorTimeoutRef = useRef(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importSelectedId, setImportSelectedId] = useState('');
+  const [importApplyLoading, setImportApplyLoading] = useState(false);
 
   // Auto-hide errors after 6 seconds
   useEffect(() => {
@@ -110,6 +121,50 @@ export default function EditHomework() {
 
   const homeworks = homeworksData?.homeworks || [];
 
+  const importHomeworkOptions = useMemo(
+    () =>
+      homeworks
+        .filter((h) => id && String(h._id) !== String(id))
+        .map((hw) => ({
+          value: String(hw._id),
+          label: formatHomeworkPickerLabel(hw),
+        })),
+    [homeworks, id]
+  );
+
+  const handleImportApply = async () => {
+    if (!importSelectedId) return;
+    const hw = homeworks.find((h) => String(h._id) === importSelectedId);
+    if (!hw) return;
+    const built = buildHomeworkImportFormState(hw);
+    if (!built) return;
+    setImportApplyLoading(true);
+    try {
+      setFormData(built.formData);
+      setSelectedCourse(built.selectedCourse);
+      setSelectedCourseType(built.selectedCourseType);
+      setSelectedLesson(built.selectedLesson);
+      setSelectedCenter(built.selectedCenter);
+      setAccountState(built.accountState);
+      setActiveTab(built.activeTab);
+      setErrors({});
+      setImagePreviews({});
+      setImageUrls({});
+      if (built.formData.homework_type === 'questions' && built.formData.questions?.length) {
+        const urls = await fetchImportedQuestionImageUrls(
+          built.formData.questions,
+          'homeworks',
+          apiClient
+        );
+        setImageUrls(urls);
+      }
+      setImportModalOpen(false);
+      setImportSelectedId('');
+    } finally {
+      setImportApplyLoading(false);
+    }
+  };
+
   // Redirect if homework not found
   useEffect(() => {
     if (id && !isLoading) {
@@ -128,6 +183,7 @@ export default function EditHomework() {
       // Convert week number to week string for the select component
       setSelectedCourse(homeworkData.course || '');
       setSelectedCourseType(homeworkData.courseType || '');
+      setSelectedCenter(homeworkData.center || '');
       setSelectedLesson(homeworkData.lesson || '');
       
       const homeworkType = homeworkData.homework_type || 'questions';
@@ -261,6 +317,68 @@ export default function EditHomework() {
       newQuestions[questionIndex] = { ...currentQuestion, ...picturePayload };
       return { ...prev, questions: newQuestions };
     });
+  };
+
+  /** After removing a middle/extra slot, shift UI state keys so slot N matches image N (parse keys with lastIndexOf to support qIdx 10+). */
+  const reindexQuestionImageSlotKeys = (prev, questionIndex, removedImageIndex) => {
+    const next = {};
+    for (const [key, val] of Object.entries(prev)) {
+      const lastUs = key.lastIndexOf('_');
+      if (lastUs <= 0) {
+        next[key] = val;
+        continue;
+      }
+      const q = Number(key.slice(0, lastUs));
+      const idx = Number(key.slice(lastUs + 1));
+      if (Number.isNaN(q) || Number.isNaN(idx)) {
+        next[key] = val;
+        continue;
+      }
+      if (q !== questionIndex) {
+        next[key] = val;
+        continue;
+      }
+      if (idx === removedImageIndex) continue;
+      if (idx > removedImageIndex) {
+        next[`${questionIndex}_${idx - 1}`] = val;
+      } else {
+        next[key] = val;
+      }
+    }
+    return next;
+  };
+
+  const reindexQuestionImageErrors = (prev, questionIndex, removedImageIndex) => {
+    const next = { ...prev };
+    const errPrefix = `question_${questionIndex}_image_`;
+    delete next[`question_${questionIndex}_image_${removedImageIndex}`];
+    const movers = Object.keys(next)
+      .filter((k) => k.startsWith(errPrefix))
+      .map((k) => {
+        const idx = Number(k.slice(errPrefix.length));
+        return { k, idx };
+      })
+      .filter(({ idx }) => !Number.isNaN(idx) && idx > removedImageIndex)
+      .sort((a, b) => a.idx - b.idx);
+    for (const { k, idx } of movers) {
+      const v = next[k];
+      delete next[k];
+      next[`question_${questionIndex}_image_${idx - 1}`] = v;
+    }
+    return next;
+  };
+
+  const reindexDragOverForQuestion = (dragOverIndex, questionIndex, removedImageIndex) => {
+    if (dragOverIndex == null || dragOverIndex === '') return dragOverIndex;
+    const key = String(dragOverIndex);
+    const lastUs = key.lastIndexOf('_');
+    if (lastUs <= 0) return dragOverIndex;
+    const q = Number(key.slice(0, lastUs));
+    const idx = Number(key.slice(lastUs + 1));
+    if (Number.isNaN(q) || Number.isNaN(idx) || q !== questionIndex) return dragOverIndex;
+    if (idx === removedImageIndex) return null;
+    if (idx > removedImageIndex) return `${questionIndex}_${idx - 1}`;
+    return dragOverIndex;
   };
 
   // Handle image upload
@@ -402,17 +520,12 @@ export default function EditHomework() {
     if (imageIndex === 0 || currentPictures.length <= 1) return;
     const nextPictures = currentPictures.filter((_, idx) => idx !== imageIndex);
     updateQuestionPictures(questionIndex, nextPictures);
-    const imageKey = `${questionIndex}_${imageIndex}`;
-    setImagePreviews(prev => {
-      const newPreviews = { ...prev };
-      delete newPreviews[imageKey];
-      return newPreviews;
-    });
-    setImageUrls(prev => {
-      const newUrls = { ...prev };
-      delete newUrls[imageKey];
-      return newUrls;
-    });
+    setImagePreviews((prev) => reindexQuestionImageSlotKeys(prev, questionIndex, imageIndex));
+    setImageUrls((prev) => reindexQuestionImageSlotKeys(prev, questionIndex, imageIndex));
+    setUploadingImages((prev) => reindexQuestionImageSlotKeys(prev, questionIndex, imageIndex));
+    setLoadingImages((prev) => reindexQuestionImageSlotKeys(prev, questionIndex, imageIndex));
+    setErrors((prev) => reindexQuestionImageErrors(prev, questionIndex, imageIndex));
+    setDragOverIndex((d) => reindexDragOverForQuestion(d, questionIndex, imageIndex));
   };
 
   // Drag and drop handlers
@@ -720,7 +833,7 @@ export default function EditHomework() {
       return;
     }
 
-    // Check for duplicate course, courseType, and lesson combination (exclude current homework)
+    // Check for duplicate course, courseType, lesson, and center (exclude current homework)
     const courseTrimmed = selectedCourse.trim();
     const courseTypeTrimmed = selectedCourseType ? selectedCourseType.trim() : '';
     const lessonTrimmed = selectedLesson.trim();
@@ -733,11 +846,12 @@ export default function EditHomework() {
         const hwLesson = (homework.lesson || '').trim();
         return hwCourse === courseTrimmed && 
                (hwCourseType || '') === courseTypeTrimmed && 
-               hwLesson === lessonTrimmed;
+               hwLesson === lessonTrimmed &&
+               centersMatchDuplicateClient(selectedCenter, homework.center);
       }
     );
     if (duplicateHomework) {
-      newErrors.general = '❌ A homework with this course, course type, and lesson already exists';
+      newErrors.general = '❌ A homework with this course, course type, lesson, and center already exists';
       setErrors(newErrors);
       
       // Clear error after 6 seconds
@@ -760,6 +874,7 @@ export default function EditHomework() {
       comment: formData.comment ? formData.comment.trim() : '',
       course: courseTrimmed,
       courseType: courseTypeTrimmed || null,
+      center: selectedCenter.trim() || null,
       lesson: lessonTrimmed,
       deadline_type: formData.deadline_type,
       deadline_date: formData.deadline_type === 'with_deadline' ? formData.deadline_date : null,
@@ -890,6 +1005,49 @@ export default function EditHomework() {
           boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
         }}>
           <form onSubmit={handleSubmit}>
+            <div
+              style={{
+                marginBottom: '24px',
+                padding: '18px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                border: '1.5px solid #bae6fd',
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ fontWeight: 700, color: '#0c4a6e', marginBottom: '8px', fontSize: '1rem', width: '100%' }}>
+                Import from another homework
+              </div>
+              <p style={{ margin: '0 0 14px', fontSize: '0.88rem', color: '#0369a1', lineHeight: 1.45, maxWidth: '520px' }}>
+                Copy fields and questions from another homework. Your changes are only saved when you click Save on this page.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportSelectedId('');
+                  setImportModalOpen(true);
+                }}
+                style={{
+                  padding: '12px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #1FA8DC 0%, #0284c7 100%)',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: '0.95rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(14, 165, 233, 0.35)',
+                  width: '100%',
+                  maxWidth: '320px',
+                }}
+              >
+                Choose homework to import…
+              </button>
+            </div>
+
             {/* Homework Course */}
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', textAlign: 'left' }}>
@@ -908,6 +1066,7 @@ export default function EditHomework() {
                   setCourseDropdownOpen(!courseDropdownOpen);
                   setCourseTypeDropdownOpen(false);
                   setLessonDropdownOpen(false);
+                  setCenterDropdownOpen(false);
                 }}
                 onClose={() => setCourseDropdownOpen(false)}
                 showAllOption={true}
@@ -938,6 +1097,7 @@ export default function EditHomework() {
                   setCourseTypeDropdownOpen(!courseTypeDropdownOpen);
                   setCourseDropdownOpen(false);
                   setLessonDropdownOpen(false);
+                  setCenterDropdownOpen(false);
                 }}
                 onClose={() => setCourseTypeDropdownOpen(false)}
               />
@@ -946,6 +1106,26 @@ export default function EditHomework() {
                   {errors.courseType}
                 </div>
               )}
+            </div>
+
+            {/* Homework Center (optional) */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', textAlign: 'left' }}>
+                Homework Center
+              </label>
+              <CenterSelect
+                selectedCenter={selectedCenter}
+                onCenterChange={setSelectedCenter}
+                required={false}
+                isOpen={centerDropdownOpen}
+                onToggle={() => {
+                  setCenterDropdownOpen(!centerDropdownOpen);
+                  setCourseDropdownOpen(false);
+                  setCourseTypeDropdownOpen(false);
+                  setLessonDropdownOpen(false);
+                }}
+                onClose={() => setCenterDropdownOpen(false)}
+              />
             </div>
 
             {/* Homework Lesson */}
@@ -966,6 +1146,7 @@ export default function EditHomework() {
                   setLessonDropdownOpen(!lessonDropdownOpen);
                   setCourseDropdownOpen(false);
                   setCourseTypeDropdownOpen(false);
+                  setCenterDropdownOpen(false);
                 }}
                 onClose={() => setLessonDropdownOpen(false)}
                 required={true}
@@ -1571,8 +1752,8 @@ export default function EditHomework() {
               </>
             )}
 
-                {/* Questions */}
-                {formData.questions && Array.isArray(formData.questions) && (
+                {/* Questions (only on Questions tab — matches add.jsx) */}
+                {activeTab === 'questions' && formData.questions && Array.isArray(formData.questions) && (
               <>
                 {formData.questions.map((question, qIdx) => (
               <div key={qIdx} className="question-section" style={{ marginBottom: '32px', padding: '20px', border: '2px solid #e9ecef', borderRadius: '12px' }}>
@@ -1609,7 +1790,10 @@ export default function EditHomework() {
                   <div style={{ fontSize: '0.875rem', color: '#6c757d', marginBottom: '8px' }}>
                     Max size: 10 MB
                   </div>
-                  {getQuestionPictures(question).map((questionImage, imageIdx) => {
+                  {(() => {
+                    const questionPictures = getQuestionPictures(question);
+                    return questionPictures.map((questionImage, imageIdx) => {
+                    const isLastImageSlot = imageIdx === questionPictures.length - 1;
                     const imageKey = `${qIdx}_${imageIdx}`;
                     const hasImage = !!questionImage || !!imagePreviews[imageKey] || !!imageUrls[imageKey];
                     return (
@@ -1647,10 +1831,12 @@ export default function EditHomework() {
                               Remove
                             </button>
                           )}
+                          {isLastImageSlot && (
                           <button type="button" onClick={() => addImageContainer(qIdx)} style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <Image src="/plus.svg" alt="Add" width={18} height={18} style={{ display: 'inline-block' }} />
                             Add
                           </button>
+                          )}
                         </div>
                         {errors[`question_${qIdx}_image_${imageIdx}`] && (
                           <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>
@@ -1659,7 +1845,8 @@ export default function EditHomework() {
                         )}
                       </div>
                     );
-                  })}
+                  });
+                  })()}
                 </div>
 
                 {/* Question Text Input (after image) */}
@@ -1973,6 +2160,22 @@ export default function EditHomework() {
         </div>
       </div>
 
+      <ImportExistingOnlineItemModal
+        open={importModalOpen}
+        onClose={() => {
+          if (!importApplyLoading) setImportModalOpen(false);
+        }}
+        title="Import homework"
+        description="Pick another homework to copy into this editor. Save when ready."
+        options={importHomeworkOptions}
+        selectedValue={importSelectedId}
+        onSelectedValueChange={setImportSelectedId}
+        onApply={handleImportApply}
+        applyLabel="Load"
+        emptyMessage="No other homeworks available."
+        applyLoading={importApplyLoading}
+      />
+
       <style jsx>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
@@ -2002,14 +2205,8 @@ export default function EditHomework() {
             margin-top: 8px !important;
           }
           .answer-buttons-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           .image-buttons-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           .add-question-container {
             flex-direction: row !important;
@@ -2017,9 +2214,6 @@ export default function EditHomework() {
             justify-content: flex-end !important;
           }
           .add-question-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           .question-section > div:first-child {
             flex-direction: column !important;
@@ -2135,9 +2329,6 @@ export default function EditHomework() {
             font-size: 0.8rem !important;
           }
           .image-buttons-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           .answer-buttons button {
             padding: 8px 10px !important;

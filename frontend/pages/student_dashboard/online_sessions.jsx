@@ -10,6 +10,7 @@ import { useStudent } from '../../lib/api/students';
 import StudentLessonSelect from '../../components/StudentLessonSelect';
 import NeedHelp from '../../components/NeedHelp';
 import R2VideoPlayer from '../../components/R2VideoPlayer';
+import YoutubeEmbedWithProgress from '../../components/YoutubeEmbedWithProgress';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
 
@@ -70,6 +71,8 @@ export default function OnlineSessions() {
   const videoStartTimeRef = useRef(null); // Track when video was opened
   const isClosingVideoRef = useRef(false); // Prevent multiple close calls
   const r2CompletedRef = useRef(false); // Track if R2 video was completed (>= 90%)
+  const selectedVideoRef = useRef(null);
+  const vvcViewsDecrementDoneRef = useRef(false);
   const [vvcPopupOpen, setVvcPopupOpen] = useState(false);
   const [vvc, setVvc] = useState('');
   const [vvcError, setVvcError] = useState('');
@@ -165,6 +168,16 @@ export default function OnlineSessions() {
       setSearchTerm("");
     }
   }, [searchInput, searchTerm]);
+
+  useEffect(() => {
+    selectedVideoRef.current = selectedVideo;
+  }, [selectedVideo]);
+
+  useEffect(() => {
+    if (videoPopupOpen) {
+      vvcViewsDecrementDoneRef.current = false;
+    }
+  }, [videoPopupOpen, selectedVideo?._id]);
 
   // Restore unlocked sessions from student's online_sessions on page load
   useEffect(() => {
@@ -354,25 +367,6 @@ export default function OnlineSessions() {
         r2CompletedRef.current = false;
         setPendingVideo(null);
         setVvc('');
-        
-        // Decrement views if code_settings is 'number_of_views'
-        if (response.data.code_settings === 'number_of_views' && response.data.vvc_id) {
-          try {
-            await apiClient.post('/api/vvc/decrement-views', {
-              vvc_id: response.data.vvc_id
-            });
-            // Update unlocked sessions with new view count
-            const updatedUnlocked = new Map(newUnlocked);
-            const sessionInfo = updatedUnlocked.get(sessionId);
-            if (sessionInfo && sessionInfo.number_of_views > 0) {
-              sessionInfo.number_of_views -= 1;
-              updatedUnlocked.set(sessionId, sessionInfo);
-              setUnlockedSessions(updatedUnlocked);
-            }
-          } catch (err) {
-            console.error('Failed to decrement views:', err);
-          }
-        }
       } else {
         setVvcError(response.data.error || '❌ Invalid VVC code');
       }
@@ -391,6 +385,48 @@ export default function OnlineSessions() {
     setVvcError('');
   };
 
+  const tryDecrementVvcViewsOnWatchProgress = useCallback(async () => {
+    if (vvcViewsDecrementDoneRef.current) return;
+    const v = selectedVideoRef.current;
+    if (!v?.vvc_id || v.code_settings !== 'number_of_views') return;
+    vvcViewsDecrementDoneRef.current = true;
+    try {
+      const decrementResponse = await apiClient.post('/api/vvc/decrement-views', {
+        vvc_id: v.vvc_id
+      });
+      if (decrementResponse.data.success) {
+        const sessionId = typeof v._id === 'string' ? v._id : v._id.toString();
+        setUnlockedSessions((prev) => {
+          const updatedUnlocked = new Map(prev);
+          const sessionInfo = updatedUnlocked.get(sessionId);
+          if (sessionInfo) {
+            sessionInfo.number_of_views = decrementResponse.data.number_of_views;
+            if (sessionInfo.number_of_views <= 0) {
+              updatedUnlocked.delete(sessionId);
+            } else {
+              updatedUnlocked.set(sessionId, sessionInfo);
+            }
+          }
+          return updatedUnlocked;
+        });
+      } else {
+        vvcViewsDecrementDoneRef.current = false;
+      }
+    } catch (err) {
+      console.error('Failed to decrement VVC views:', err);
+      vvcViewsDecrementDoneRef.current = false;
+      if (err.response?.data?.error?.includes('no views remaining')) {
+        const sessionId = typeof v._id === 'string' ? v._id : v._id.toString();
+        setUnlockedSessions((prev) => {
+          const next = new Map(prev);
+          next.delete(sessionId);
+          return next;
+        });
+        setVvcError('❌ Sorry, this code has no views remaining');
+      }
+    }
+  }, []);
+
   // Handle R2 video completion (>= 90% watched)
   const handleR2VideoComplete = useCallback(async (videoId, percent) => {
     r2CompletedRef.current = true;
@@ -404,7 +440,7 @@ export default function OnlineSessions() {
     
     // Check if video is unlocked
     if (isVideoUnlocked(session)) {
-      // Video is unlocked - check deadline date and decrement views if needed
+      // Video is unlocked - check deadline date (views decrement after >=10% watch via player)
       const sessionId = session._id?.toString() || session._id;
       const unlockedInfo = unlockedSessions.get(sessionId);
       
@@ -424,41 +460,6 @@ export default function OnlineSessions() {
             newUnlocked.delete(sessionId);
             setUnlockedSessions(newUnlocked);
             return;
-          }
-        }
-        
-        // Decrement views if code_settings is 'number_of_views'
-        if (unlockedInfo.code_settings === 'number_of_views' && unlockedInfo.vvc_id) {
-          try {
-            const decrementResponse = await apiClient.post('/api/vvc/decrement-views', {
-              vvc_id: unlockedInfo.vvc_id
-            });
-            
-            if (decrementResponse.data.success) {
-              // Update unlocked sessions with new view count
-              const updatedUnlocked = new Map(unlockedSessions);
-              const sessionInfo = updatedUnlocked.get(sessionId);
-              if (sessionInfo) {
-                sessionInfo.number_of_views = decrementResponse.data.number_of_views;
-                if (sessionInfo.number_of_views <= 0) {
-                  // No views remaining - remove from unlocked
-                  updatedUnlocked.delete(sessionId);
-                } else {
-                  updatedUnlocked.set(sessionId, sessionInfo);
-                }
-                setUnlockedSessions(updatedUnlocked);
-              }
-            }
-          } catch (err) {
-            console.error('Failed to decrement views:', err);
-            if (err.response?.data?.error?.includes('no views remaining')) {
-              // Remove from unlocked sessions
-              const newUnlocked = new Map(unlockedSessions);
-              newUnlocked.delete(sessionId);
-              setUnlockedSessions(newUnlocked);
-              setVvcError('❌ Sorry, this code has no views remaining');
-              return;
-            }
           }
         }
       }
@@ -1104,6 +1105,16 @@ export default function OnlineSessions() {
                     r2Key={selectedVideo.video_ID}
                     videoId={selectedVideo._id}
                     onComplete={handleR2VideoComplete}
+                    onMilestonePercent={
+                      selectedVideo.code_settings === 'number_of_views' && selectedVideo.vvc_id
+                        ? tryDecrementVvcViewsOnWatchProgress
+                        : undefined
+                    }
+                  />
+                ) : selectedVideo.code_settings === 'number_of_views' && selectedVideo.vvc_id ? (
+                  <YoutubeEmbedWithProgress
+                    youtubeVideoId={selectedVideo.video_ID || selectedVideo.video_ID_1 || ''}
+                    onThresholdReached={tryDecrementVvcViewsOnWatchProgress}
                   />
                 ) : (
                   <iframe

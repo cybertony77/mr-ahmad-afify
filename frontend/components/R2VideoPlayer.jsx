@@ -6,10 +6,11 @@ function buildVideoApiPath(r2Key) {
   return segments.map((s) => encodeURIComponent(s)).join("/");
 }
 
-export default function R2VideoPlayer({ r2Key, videoId, onComplete }) {
+export default function R2VideoPlayer({ r2Key, videoId, onComplete, onMilestonePercent }) {
   const videoRef = useRef(null);
   const [error, setError] = useState(null);
   const hasMarkedComplete = useRef(false);
+  const hasMilestoneRef = useRef(false);
   /** Cache-bust query; bump when r2Key changes (not on first mount) or on retry */
   const [streamNonce, setStreamNonce] = useState(() => Date.now());
   const prevR2KeyRef = useRef(r2Key);
@@ -32,10 +33,15 @@ export default function R2VideoPlayer({ r2Key, videoId, onComplete }) {
     if (!video || !videoUrl) return;
 
     const handleTimeUpdate = () => {
-      if (!video.duration || hasMarkedComplete.current) return;
+      if (!video.duration) return;
       const percent = (video.currentTime / video.duration) * 100;
 
-      if (percent >= 90) {
+      if (!hasMilestoneRef.current && percent >= 10 && onMilestonePercent) {
+        hasMilestoneRef.current = true;
+        onMilestonePercent(videoId, percent);
+      }
+
+      if (!hasMarkedComplete.current && percent >= 90) {
         hasMarkedComplete.current = true;
         if (onComplete) {
           onComplete(videoId, percent);
@@ -48,10 +54,11 @@ export default function R2VideoPlayer({ r2Key, videoId, onComplete }) {
     return () => {
       video.removeEventListener("timeupdate", handleTimeUpdate);
     };
-  }, [videoUrl, videoId, onComplete]);
+  }, [videoUrl, videoId, onComplete, onMilestonePercent]);
 
   useEffect(() => {
     hasMarkedComplete.current = false;
+    hasMilestoneRef.current = false;
     setError(null);
   }, [r2Key]);
 

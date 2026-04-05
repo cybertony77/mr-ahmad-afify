@@ -3,7 +3,16 @@ import HwChart from "./HwChart";
 import QuizChart from "./QuizChart";
 import MockExamChart from "./MockExamChart";
 
-export default function ChartTabs({ lessons, mockExams, onlineMockExams, mockExamChartData }) {
+export default function ChartTabs({
+  lessons,
+  mockExams,
+  onlineMockExams,
+  mockExamChartData,
+  homeworkChartData,
+  homeworkChartLoading,
+  quizChartData,
+  quizChartLoading,
+}) {
   const [active, setActive] = useState('hw');
 
   const normalizedLessons = useMemo(() => {
@@ -140,9 +149,17 @@ export default function ChartTabs({ lessons, mockExams, onlineMockExams, mockExa
 
       <div style={{ background: 'white', border: '1px solid #dee2e6', borderRadius: 12, padding: 20 }}>
         {active === 'hw' ? (
-          <HwChart lessons={normalizedLessons} />
+          <HwChart
+            lessons={normalizedLessons}
+            chartData={homeworkChartData}
+            chartLoading={homeworkChartLoading}
+          />
         ) : active === 'quiz' ? (
-          <QuizChart lessons={normalizedLessons} chartData={null} />
+          <QuizChart
+            lessons={normalizedLessons}
+            chartData={quizChartData}
+            chartLoading={quizChartLoading}
+          />
         ) : (
           <MockExamChart mockExams={normalizedMockExams} />
         )}

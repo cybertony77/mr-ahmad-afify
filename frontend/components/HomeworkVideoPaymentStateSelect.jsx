@@ -21,7 +21,8 @@ const HomeworkVideoPaymentStateSelect = ({
     { value: '', label: '✕ Clear selection', color: '#dc3545', isClear: true },
     { value: 'paid', label: 'Paid', color: '#000000' },
     { value: 'free', label: 'Free', color: '#000000' },
-    { value: 'free_if_attended', label: 'Free if attended the session', color: '#000000' }
+    { value: 'free_if_homework_done', label: 'Free if submitted this lesson homework', color: '#000000' },
+    { value: 'free_if_attended', label: 'Free if attended the session', color: '#000000' },
   ];
 
   const selectedOption = options.find(opt => opt.value === value);

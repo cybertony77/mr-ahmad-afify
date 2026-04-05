@@ -2,6 +2,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../../lib/authMiddleware';
+import { itemCenterMatchesStudentMainCenter } from '../../../../lib/studentCenterMatch';
 
 function loadEnvConfig() {
   try {
@@ -56,37 +57,42 @@ export default async function handler(req, res) {
     }
 
     const onlineMockExams = student.online_mock_exams || [];
-    
-    // Fetch mock exam details for each mock_exam_id
-    const mockExamsWithDetails = await Promise.all(
-      onlineMockExams.map(async (meResult) => {
-        try {
-          const mockExam = await db.collection('mock_exams').findOne({ 
-            _id: new ObjectId(meResult.mock_exam_id) 
-          });
-          return {
-            ...meResult,
-            mockExam: mockExam ? {
-              _id: mockExam._id,
-              lesson_name: mockExam.lesson_name,
-              lesson: mockExam.lesson,
-              timer: mockExam.timer,
-              questions: mockExam.questions ? mockExam.questions.length : 0
-            } : null
-          };
-        } catch (err) {
-          console.error(`Error fetching mock exam ${meResult.mock_exam_id}:`, err);
-          return {
-            ...meResult,
-            mockExam: null
-          };
-        }
-      })
-    );
+    const mainCenter = student.main_center;
 
-    res.json({ 
+    const mockExamsWithDetails = (
+      await Promise.all(
+        onlineMockExams.map(async (meResult) => {
+          try {
+            const mockExam = await db.collection('mock_exams').findOne({
+              _id: new ObjectId(meResult.mock_exam_id),
+            });
+            if (!mockExam) {
+              return null;
+            }
+            if (!itemCenterMatchesStudentMainCenter(mockExam.center, mainCenter)) {
+              return null;
+            }
+            return {
+              ...meResult,
+              mockExam: {
+                _id: mockExam._id,
+                lesson_name: mockExam.lesson_name,
+                lesson: mockExam.lesson,
+                timer: mockExam.timer,
+                questions: mockExam.questions ? mockExam.questions.length : 0,
+              },
+            };
+          } catch (err) {
+            console.error(`Error fetching mock exam ${meResult.mock_exam_id}:`, err);
+            return null;
+          }
+        })
+      )
+    ).filter(Boolean);
+
+    res.json({
       success: true,
-      mockExams: mockExamsWithDetails
+      mockExams: mockExamsWithDetails,
     });
   } catch (error) {
     console.error('❌ Error fetching online mock exams:', error);

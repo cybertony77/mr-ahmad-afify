@@ -2,6 +2,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../../lib/authMiddleware';
+import { itemCenterMatchesStudentMainCenter } from '../../../../lib/studentCenterMatch';
 
 function loadEnvConfig() {
   try {
@@ -64,6 +65,10 @@ export default async function handler(req, res) {
     const quiz = await db.collection('quizzes').findOne({ _id: new ObjectId(quiz_id) });
     if (!quiz) {
       return res.status(404).json({ error: 'Quiz not found' });
+    }
+
+    if (!itemCenterMatchesStudentMainCenter(quiz.center, student.main_center)) {
+      return res.status(403).json({ error: 'This quiz is not available for this student center' });
     }
 
     // Find result that matches this quiz_id

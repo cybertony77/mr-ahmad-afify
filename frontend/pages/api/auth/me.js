@@ -58,15 +58,31 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const assistant = await db.collection('users').findOne({ id: decoded.assistant_id });
       if (!assistant) return res.status(404).json({ error: 'Assistant not found' });
-      res.json({
+
+      const payload = {
         id: assistant.id,
         name: assistant.name,
         phone: assistant.phone,
         password: assistant.password,
         role: assistant.role,
         email: assistant.email || null,
-        profile_picture: assistant.profile_picture || null
-      });
+        profile_picture: assistant.profile_picture || null,
+      };
+
+      // Student-specific fields live on `students`, not `users` (e.g. main_center for center filtering)
+      if (assistant.role === 'student') {
+        const student = await db.collection('students').findOne({ id: assistant.id });
+        if (student) {
+          payload.main_center = student.main_center ?? null;
+          payload.course = student.course ?? null;
+          payload.courseType = student.courseType ?? null;
+          payload.grade = student.grade ?? null;
+          payload.school = student.school ?? null;
+          payload.parentsPhone = student.parentsPhone ?? student.parents_phone ?? null;
+        }
+      }
+
+      res.json(payload);
     } else if (req.method === 'PUT') {
       const { name, id, phone, password, profile_picture, email } = req.body;
       

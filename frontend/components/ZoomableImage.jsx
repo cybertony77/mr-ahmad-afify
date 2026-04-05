@@ -283,7 +283,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
             position: 'relative',
             maxWidth: '100%',
             maxHeight: '1200px',
-            display: 'inline-block',
+            display: 'block',
             touchAction: 'none',
             width: '100%'
           }}
@@ -315,6 +315,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
             src={src}
             alt={alt}
             className="zoomable-image"
+            fit="contain"
             style={{
               maxWidth: '100%',
               maxHeight: '1200px',
@@ -556,6 +557,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {},
         .zoomable-image {
           width: 100%;
           height: auto;
+          object-fit: contain;
         }
         
         @media (max-width: 768px) {

@@ -37,7 +37,7 @@ function parseDegreeToNumber(value) {
   return null;
 }
 
-export default function HwChart({ lessons, chartData }) {
+export default function HwChart({ lessons, chartData, chartLoading }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const [tooltipData, setTooltipData] = useState(null);
   const chartRef = useRef(null);
@@ -69,8 +69,14 @@ export default function HwChart({ lessons, chartData }) {
   }, []);
 
   const data = useMemo(() => {
-    // Priority 1: Use API chart data if available (more accurate, includes online_homeworks)
-    if (chartData && Array.isArray(chartData) && chartData.length > 0) {
+    if (chartLoading) {
+      return [];
+    }
+    // API-driven chart (center/course filtered on server) — includes empty array; do not fall back to raw lessons
+    if (chartData !== undefined && chartData !== null) {
+      if (!Array.isArray(chartData) || chartData.length === 0) {
+        return [];
+      }
       return chartData
         .map((item) => {
           const percentage = item.percentage || 0;
@@ -84,7 +90,7 @@ export default function HwChart({ lessons, chartData }) {
         .filter(item => item.degree > 0 || item.originalDegree !== '0 / 0');
     }
 
-    // Priority 2: Fallback to lessons prop (for backward compatibility)
+    // Legacy: lessons prop only when chartData not supplied
     if (!lessons) return [];
     return lessons
       .map((l) => {
@@ -96,7 +102,24 @@ export default function HwChart({ lessons, chartData }) {
         };
       })
       .filter(Boolean);
-  }, [lessons, chartData]);
+  }, [lessons, chartData, chartLoading]);
+
+  if (chartLoading) {
+    return (
+      <div style={{
+        textAlign: 'center',
+        padding: '60px 20px',
+        color: '#6c757d',
+        fontSize: '1.1rem',
+        fontWeight: '500',
+        background: '#f8f9fa',
+        borderRadius: '8px',
+        border: '1px solid #dee2e6'
+      }}>
+        Loading chart…
+      </div>
+    );
+  }
 
   if (!data.length) {
     return (

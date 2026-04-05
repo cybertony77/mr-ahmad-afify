@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../lib/authMiddleware';
 import { pickQuestionPictureFields } from '../../../lib/questionPictures';
+import { itemCenterMatchesStudentMainCenter } from '../../../lib/studentCenterMatch';
 
 function loadEnvConfig() {
   try {
@@ -98,8 +99,10 @@ export default async function handler(req, res) {
                                  meCourseType.toLowerCase() === studentCourseTypeTrimmed.toLowerCase();
           // Activation state: hide deactivated mock exams from students
           const isActivated = meState !== 'Deactivated';
+
+          const centerMatch = itemCenterMatchesStudentMainCenter(me.center, studentMainCenter);
           
-          const matches = courseMatch && courseTypeMatch && isActivated;
+          const matches = courseMatch && courseTypeMatch && isActivated && centerMatch;
           console.log(`🔍 Mock exam course: "${meCourse}" courseType: "${meCourseType}" | Matches: ${matches}`);
           return matches;
         });
@@ -121,6 +124,7 @@ export default async function handler(req, res) {
             _id: me._id,
             course: me.course || null,
             courseType: me.courseType || null,
+            center: me.center || null,
             lesson: me.lesson || null,
             lesson_name: me.lesson_name,
             // Expose normalized activation state so frontend can safely filter

@@ -2,6 +2,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../lib/authMiddleware';
+import { duplicateCenterMongoFragment } from '../../../lib/onlineItemDuplicate';
 
 function loadEnvConfig() {
   try {
@@ -89,7 +90,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       // Create new homework
-      const { lesson_name, timer, questions, lesson, course, courseType, homework_type, deadline_type, deadline_date, book_name, from_page, to_page, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
+      const { lesson_name, timer, questions, lesson, course, courseType, center, homework_type, deadline_type, deadline_date, book_name, from_page, to_page, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
 
       if (!lesson_name || lesson_name.trim() === '') {
         return res.status(400).json({ error: '❌ Lesson name is required' });
@@ -182,14 +183,18 @@ export default async function handler(req, res) {
       const courseTrimmed = course.trim();
       const courseTypeTrimmed = courseType ? courseType.trim() : '';
       const lessonTrimmed = lesson.trim();
+      const centerTrimmed = center && String(center).trim() !== '' ? String(center).trim() : null;
       
-      const existingHomework = await db.collection('homeworks').findOne({ 
+      const existingHomework = await db.collection('homeworks').findOne({
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
-        lesson: lessonTrimmed
+        lesson: lessonTrimmed,
+        ...duplicateCenterMongoFragment(centerTrimmed),
       });
       if (existingHomework) {
-        return res.status(400).json({ error: `❌ A homework with this course, course type, and lesson already exists.` });
+        return res.status(400).json({
+          error: `❌ A homework with this course, course type, lesson, and center already exists.`,
+        });
       }
 
       // Normalize homework state (default to "Activated")
@@ -201,6 +206,7 @@ export default async function handler(req, res) {
       const homework = {
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
+        center: centerTrimmed,
         lesson: lessonTrimmed,
         lesson_name: lesson_name.trim(),
         homework_type: homework_type,
@@ -256,7 +262,7 @@ export default async function handler(req, res) {
     if (req.method === 'PUT') {
       // Update homework
       const { id } = req.query;
-      const { lesson_name, timer, questions, lesson, course, courseType, homework_type, deadline_type, deadline_date, book_name, from_page, to_page, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
+      const { lesson_name, timer, questions, lesson, course, courseType, center, homework_type, deadline_type, deadline_date, book_name, from_page, to_page, shuffle_questions_and_answers, show_details_after_submitting, comment, pdf_file_name, pdf_url, state } = req.body;
 
       if (!id) {
         return res.status(400).json({ error: '❌ Homework ID is required' });
@@ -353,15 +359,19 @@ export default async function handler(req, res) {
       const courseTrimmed = course.trim();
       const courseTypeTrimmed = courseType ? courseType.trim() : '';
       const lessonTrimmed = lesson.trim();
+      const centerTrimmed = center && String(center).trim() !== '' ? String(center).trim() : null;
       
-      const existingHomework = await db.collection('homeworks').findOne({ 
+      const existingHomework = await db.collection('homeworks').findOne({
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
         lesson: lessonTrimmed,
-        _id: { $ne: new ObjectId(id) } // Exclude current homework
+        ...duplicateCenterMongoFragment(centerTrimmed),
+        _id: { $ne: new ObjectId(id) }, // Exclude current homework
       });
       if (existingHomework) {
-        return res.status(400).json({ error: `❌ A homework with this course, course type, and lesson already exists.` });
+        return res.status(400).json({
+          error: `❌ A homework with this course, course type, lesson, and center already exists.`,
+        });
       }
 
       // Normalize homework state if provided
@@ -373,6 +383,7 @@ export default async function handler(req, res) {
       const updateData = {
         course: courseTrimmed,
         courseType: courseTypeTrimmed || null,
+        center: centerTrimmed,
         lesson: lessonTrimmed,
         lesson_name: lesson_name.trim(),
         homework_type: homework_type,

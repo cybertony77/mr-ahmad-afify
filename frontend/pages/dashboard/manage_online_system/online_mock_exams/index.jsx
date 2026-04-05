@@ -6,6 +6,7 @@ import apiClient from '../../../../lib/axios';
 import Image from 'next/image';
 import CourseSelect from '../../../../components/CourseSelect';
 import CourseTypeSelect from '../../../../components/CourseTypeSelect';
+import CenterSelect from '../../../../components/CenterSelect';
 import MockExamSelect from '../../../../components/MockExamSelect';
 import TimerSelect from '../../../../components/TimerSelect';
 import AccountStateSelect from '../../../../components/AccountStateSelect';
@@ -63,11 +64,13 @@ export default function MockExams() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCourse, setFilterCourse] = useState('');
   const [filterCourseType, setFilterCourseType] = useState('');
+  const [filterCenter, setFilterCenter] = useState('');
   const [filterMockExam, setFilterMockExam] = useState('');
   const [filterTimer, setFilterTimer] = useState('');
   const [filterAccountState, setFilterAccountState] = useState('');
   const [filterCourseDropdownOpen, setFilterCourseDropdownOpen] = useState(false);
   const [filterCourseTypeDropdownOpen, setFilterCourseTypeDropdownOpen] = useState(false);
+  const [filterCenterDropdownOpen, setFilterCenterDropdownOpen] = useState(false);
   const [filterTimerDropdownOpen, setFilterTimerDropdownOpen] = useState(false);
 
   // Fetch mock exams
@@ -108,6 +111,15 @@ export default function MockExams() {
       const mockExamCourseType = (mockExam.courseType || '').trim();
       const filterCourseTypeTrimmed = filterCourseType.trim();
       if (mockExamCourseType.toLowerCase() !== filterCourseTypeTrimmed.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // Center filter
+    if (filterCenter) {
+      const meCenter = (mockExam.center || '').trim();
+      const filterCenterTrimmed = filterCenter.trim();
+      if (meCenter.toLowerCase() !== filterCenterTrimmed.toLowerCase()) {
         return false;
       }
     }
@@ -343,6 +355,7 @@ export default function MockExams() {
                 onToggle={() => {
                   setFilterCourseDropdownOpen(!filterCourseDropdownOpen);
                   setFilterCourseTypeDropdownOpen(false);
+                  setFilterCenterDropdownOpen(false);
                   setFilterTimerDropdownOpen(false);
                 }}
                 onClose={() => setFilterCourseDropdownOpen(false)}
@@ -362,9 +375,28 @@ export default function MockExams() {
                 onToggle={() => {
                   setFilterCourseTypeDropdownOpen(!filterCourseTypeDropdownOpen);
                   setFilterCourseDropdownOpen(false);
+                  setFilterCenterDropdownOpen(false);
                   setFilterTimerDropdownOpen(false);
                 }}
                 onClose={() => setFilterCourseTypeDropdownOpen(false)}
+              />
+            </div>
+            <div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
+              <label className="filter-label" style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#495057', fontSize: '0.95rem' }}>
+                Filter by Center
+              </label>
+              <CenterSelect
+                selectedCenter={filterCenter}
+                onCenterChange={setFilterCenter}
+                required={false}
+                isOpen={filterCenterDropdownOpen}
+                onToggle={() => {
+                  setFilterCenterDropdownOpen(!filterCenterDropdownOpen);
+                  setFilterCourseDropdownOpen(false);
+                  setFilterCourseTypeDropdownOpen(false);
+                  setFilterTimerDropdownOpen(false);
+                }}
+                onClose={() => setFilterCenterDropdownOpen(false)}
               />
             </div>
             <div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
@@ -395,6 +427,7 @@ export default function MockExams() {
                   setFilterTimerDropdownOpen(!filterTimerDropdownOpen);
                   setFilterCourseDropdownOpen(false);
                   setFilterCourseTypeDropdownOpen(false);
+                  setFilterCenterDropdownOpen(false);
                 }}
                 onClose={() => setFilterTimerDropdownOpen(false)}
               />
@@ -479,27 +512,27 @@ export default function MockExams() {
                 >
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: '600', marginBottom: '8px' }}>
-                      {[mockExam.course, mockExam.courseType, mockExam.lesson, mockExam.lesson_name].filter(Boolean).join(' • ')}
+                      {[mockExam.course, mockExam.courseType, mockExam.center, mockExam.lesson, mockExam.lesson_name].filter(Boolean).join(' • ')}
                     </div>
                     <div style={{ color: '#6c757d', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       {mockExam.mock_exam_type === 'pdf' ? (
-                        <div style={{ padding: '12px 16px', backgroundColor: '#ffffff', border: '2px solid #e9ecef', borderRadius: '8px', fontSize: '0.95rem', color: '#495057', textAlign: 'left', display: 'inline-block', maxWidth: '350px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ padding: '12px 16px', backgroundColor: '#ffffff', border: '2px solid #e9ecef', borderRadius: '8px', fontSize: '0.95rem', color: '#495057', textAlign: 'left', display: 'inline-block', maxWidth: '100%' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap', maxWidth: '100%' }}>
                             {(() => {
                               const itemState = mockExam.state || mockExam.account_state || 'Activated';
                               const stateColor = itemState === 'Activated' ? '#28a745' : '#dc3545';
                               return (
                                 <>
-                                  <span style={{ color: stateColor, fontWeight: '600' }}>
+                                  <span style={{ color: stateColor, fontWeight: '600', flexShrink: 0 }}>
                                     {itemState}
                                   </span>
-                                  <span>•</span>
+                                  <span style={{ flexShrink: 0 }}>•</span>
+                                  <span style={{ fontWeight: '600', minWidth: 0 }}>
+                                    {`File Name : ${mockExam.pdf_file_name || 'file'}.pdf`}
+                                  </span>
                                 </>
                               );
                             })()}
-                            <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-                              {`File Name : ${mockExam.pdf_file_name || 'file'}.pdf`}
-                            </div>
                           </div>
                         </div>
                       ) : (
@@ -647,7 +680,7 @@ export default function MockExams() {
                 </h2>
                 {selectedMockExamForAnalytics && (
                   <p className="analytics-subtitle">
-                    {[selectedMockExamForAnalytics.course, selectedMockExamForAnalytics.courseType, selectedMockExamForAnalytics.lesson, selectedMockExamForAnalytics.lesson_name].filter(Boolean).join(' • ')}
+                    {[selectedMockExamForAnalytics.course, selectedMockExamForAnalytics.courseType, selectedMockExamForAnalytics.center, selectedMockExamForAnalytics.lesson, selectedMockExamForAnalytics.lesson_name].filter(Boolean).join(' • ')}
                   </p>
                 )}
               </div>

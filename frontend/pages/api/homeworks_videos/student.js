@@ -106,13 +106,29 @@ export default async function handler(req, res) {
       console.log('✅ Filtered sessions count:', filteredSessions.length);
       
       // For sessions with payment_state 'free_if_attended', check if student attended the lesson
-      const sessionsWithAttendance = filteredSessions.map(session => {
+      // For 'free_if_homework_done', unlock only if lessons[lesson].hwDone is present and not false
+      const sessionsWithAttendance = filteredSessions.map((session) => {
         if (session.payment_state === 'free_if_attended' && session.lesson) {
-          // Check if student attended this lesson
           const lessonData = studentLessons[session.lesson];
           const attended = lessonData && lessonData.attended === true;
-          // If not attended, mark as locked (but still include in results)
           return { ...session, _isFreeIfAttended: true, _attended: attended };
+        }
+        if (session.payment_state === 'free_if_homework_done' && session.lesson) {
+          const lessonData = studentLessons[session.lesson];
+          let hwDoneUnlocks = false;
+          if (
+            lessonData &&
+            typeof lessonData === 'object' &&
+            Object.prototype.hasOwnProperty.call(lessonData, 'hwDone') &&
+            lessonData.hwDone !== false
+          ) {
+            hwDoneUnlocks = true;
+          }
+          return {
+            ...session,
+            _isFreeIfHomeworkDone: true,
+            _hwDoneUnlocks: hwDoneUnlocks,
+          };
         }
         return session;
       });

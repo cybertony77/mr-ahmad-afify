@@ -40,6 +40,16 @@ function buildEmbedUrl(videoId) {
   return `https://www.youtube.com/embed/${videoId}?controls=1&rel=0&modestbranding=1&disablekb=1&fs=1`;
 }
 
+function formatHomeworkVideoPaymentStateLabel(state) {
+  const labels = {
+    paid: 'paid',
+    free: 'free',
+    free_if_homework_done: 'free if submitted homework',
+    free_if_attended: 'free_if_attended',
+  };
+  return labels[state] || state || 'paid';
+}
+
 
 function InputWithButton(props) {
   const theme = useMantineTheme();
@@ -627,7 +637,7 @@ export default function HomeworksVideos() {
                         {accountState}
                       </span>
                       <span>•</span>
-                      <span>{session.payment_state || 'paid'}</span>
+                      <span>{formatHomeworkVideoPaymentStateLabel(session.payment_state)}</span>
                       <span>•</span>
                       <span>{`${videoLength} video${videoLength !== 1 ? 's' : ''}`}</span>
                       {session.date && (
@@ -783,7 +793,7 @@ export default function HomeworksVideos() {
                     {accountState}
                   </span>
                   <span>•</span>
-                  <span>{session.payment_state || 'paid'}</span>
+                  <span>{formatHomeworkVideoPaymentStateLabel(session.payment_state)}</span>
                   <span>•</span>
                   <span>{`${videoLength} video${videoLength !== 1 ? 's' : ''}`}</span>
                   {session.date && (

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../../lib/authMiddleware';
 import { verifySignature } from '../../../../lib/hmac';
+import { itemCenterMatchesStudentMainCenter } from '../../../../lib/studentCenterMatch';
 
 function loadEnvConfig() {
   try {
@@ -86,6 +87,7 @@ export default async function handler(req, res) {
     // Get student's course and courseType
     const studentCourse = student.course;
     const studentCourseType = student.courseType;
+    const studentMainCenter = student.main_center;
     
     if (!studentCourse) {
       // If student has no course, return empty array
@@ -176,9 +178,15 @@ export default async function handler(req, res) {
       const courseTypeMatch = !hwCourseType || 
                              !studentCourseTypeTrimmed ||
                              hwCourseType.toLowerCase() === studentCourseTypeTrimmed.toLowerCase();
+
+      const centerMatch = itemCenterMatchesStudentMainCenter(hw.center, studentMainCenter);
       
-      return courseMatch && courseTypeMatch;
+      return courseMatch && courseTypeMatch && centerMatch;
     });
+
+    const allowedLessonNamesFromHomeworks = new Set(
+      filteredHomeworks.map((hw) => hw.lesson).filter(Boolean)
+    );
 
     // Group all homeworks by lesson - show result directly from DB (no aggregation)
     // If multiple homeworks in same lesson, prioritize completed ones
@@ -225,6 +233,9 @@ export default async function handler(req, res) {
     Object.keys(lessons).forEach(lessonName => {
       const lessonData = lessons[lessonName];
       if (lessonData && lessonData.homework_degree) {
+        if (!allowedLessonNamesFromHomeworks.has(lessonName)) {
+          return;
+        }
         // Check if this lesson already has data from filteredHomeworks
         if (!lessonDataMap[lessonName]) {
           // Parse homework_degree format like "50 / 120"

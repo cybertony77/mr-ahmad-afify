@@ -5,6 +5,7 @@ import QuizPerformanceChart from '../../../../components/QuizPerformanceChart';
 import { useStudents, useStudent } from '../../../../lib/api/students';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
+import { itemCenterMatchesStudentMainCenter } from '../../../../lib/studentCenterMatch';
 import Image from 'next/image';
 
 export default function PreviewStudentQuizzes() {
@@ -49,17 +50,16 @@ export default function PreviewStudentQuizzes() {
 
   const allQuizzes = allQuizzesData?.quizzes || [];
 
-  // Get active lessons from Activated quizzes
   const activeLessons = useMemo(() => {
     const lessonSet = new Set();
-    allQuizzes.forEach(quiz => {
+    const mainCenter = student?.main_center;
+    allQuizzes.forEach((quiz) => {
+      if (!itemCenterMatchesStudentMainCenter(quiz.center, mainCenter)) return;
       const itemState = quiz.state || quiz.account_state || 'Activated';
-      if (itemState === 'Activated') {
-        if (quiz.lesson) lessonSet.add(quiz.lesson);
-      }
+      if (itemState === 'Activated' && quiz.lesson) lessonSet.add(quiz.lesson);
     });
     return lessonSet;
-  }, [allQuizzes]);
+  }, [allQuizzes, student?.main_center]);
 
   // Fetch quiz performance chart data using API endpoint
   const { data: performanceData, isLoading: isChartLoading } = useQuery({

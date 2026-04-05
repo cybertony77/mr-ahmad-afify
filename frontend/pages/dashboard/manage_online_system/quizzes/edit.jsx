@@ -1,14 +1,20 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import Title from '../../../../components/Title';
 import AttendanceLessonSelect from '../../../../components/AttendancelessonSelect';
 import CourseSelect from '../../../../components/CourseSelect';
 import CourseTypeSelect from '../../../../components/CourseTypeSelect';
+import CenterSelect from '../../../../components/CenterSelect';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
 import Image from 'next/image';
 import ZoomableImage from '../../../../components/ZoomableImage';
 import AccountStateSelect from '../../../../components/AccountStateSelect';
+import ImportExistingOnlineItemModal from '../../../../components/ImportExistingOnlineItemModal';
+import { formatQuizPickerLabel } from '../../../../lib/importOnlineItemLabels';
+import { buildQuizImportFormState } from '../../../../lib/importOnlineFormState';
+import { fetchImportedQuestionImageUrls } from '../../../../lib/fetchImportedQuestionImageUrls';
+import { centersMatchDuplicateClient } from '../../../../lib/onlineItemDuplicate';
 
 
 export default function EditQuiz() {
@@ -47,6 +53,8 @@ export default function EditQuiz() {
   const [courseTypeDropdownOpen, setCourseTypeDropdownOpen] = useState(false);
   const [selectedLesson, setSelectedLesson] = useState('');
   const [lessonDropdownOpen, setLessonDropdownOpen] = useState(false);
+  const [selectedCenter, setSelectedCenter] = useState('');
+  const [centerDropdownOpen, setCenterDropdownOpen] = useState(false);
   const [accountState, setAccountState] = useState('Activated');
   const [errors, setErrors] = useState({});
   const [uploadingImages, setUploadingImages] = useState({});
@@ -55,6 +63,9 @@ export default function EditQuiz() {
   const [loadingImages, setLoadingImages] = useState({});
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const errorTimeoutRef = useRef(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importSelectedId, setImportSelectedId] = useState('');
+  const [importApplyLoading, setImportApplyLoading] = useState(false);
 
   // Auto-hide errors after 6 seconds
   useEffect(() => {
@@ -107,6 +118,50 @@ export default function EditQuiz() {
 
   const quizzes = quizzesData?.quizzes || [];
 
+  const importQuizOptions = useMemo(
+    () =>
+      quizzes
+        .filter((q) => id && String(q._id) !== String(id))
+        .map((quiz) => ({
+          value: String(quiz._id),
+          label: formatQuizPickerLabel(quiz),
+        })),
+    [quizzes, id]
+  );
+
+  const handleImportApply = async () => {
+    if (!importSelectedId) return;
+    const quiz = quizzes.find((q) => String(q._id) === importSelectedId);
+    if (!quiz) return;
+    const built = buildQuizImportFormState(quiz);
+    if (!built) return;
+    setImportApplyLoading(true);
+    try {
+      setFormData(built.formData);
+      setSelectedCourse(built.selectedCourse);
+      setSelectedCourseType(built.selectedCourseType);
+      setSelectedLesson(built.selectedLesson);
+      setSelectedCenter(built.selectedCenter);
+      setAccountState(built.accountState);
+      setActiveTab(built.activeTab);
+      setErrors({});
+      setImagePreviews({});
+      setImageUrls({});
+      if (built.formData.quiz_type === 'questions' && built.formData.questions?.length) {
+        const urls = await fetchImportedQuestionImageUrls(
+          built.formData.questions,
+          'quizzes',
+          apiClient
+        );
+        setImageUrls(urls);
+      }
+      setImportModalOpen(false);
+      setImportSelectedId('');
+    } finally {
+      setImportApplyLoading(false);
+    }
+  };
+
   // Redirect if quiz not found
   useEffect(() => {
     if (id && !isLoading) {
@@ -124,6 +179,7 @@ export default function EditQuiz() {
     if (quizData && !dataLoaded && !dataLoadedRef.current) {
       setSelectedCourse(quizData.course || '');
       setSelectedCourseType(quizData.courseType || '');
+      setSelectedCenter(quizData.center || '');
       setSelectedLesson(quizData.lesson || '');
       const quizType = quizData.quiz_type || 'questions';
       setActiveTab(quizType);
@@ -251,6 +307,68 @@ export default function EditQuiz() {
       newQuestions[questionIndex] = { ...currentQuestion, ...buildQuestionPicturesPayload(pictures) };
       return { ...prev, questions: newQuestions };
     });
+  };
+
+  /** After removing a middle/extra slot, shift UI state keys so slot N matches image N (lastIndexOf parses qIdx 10+). */
+  const reindexQuestionImageSlotKeys = (prev, questionIndex, removedImageIndex) => {
+    const next = {};
+    for (const [key, val] of Object.entries(prev)) {
+      const lastUs = key.lastIndexOf('_');
+      if (lastUs <= 0) {
+        next[key] = val;
+        continue;
+      }
+      const q = Number(key.slice(0, lastUs));
+      const idx = Number(key.slice(lastUs + 1));
+      if (Number.isNaN(q) || Number.isNaN(idx)) {
+        next[key] = val;
+        continue;
+      }
+      if (q !== questionIndex) {
+        next[key] = val;
+        continue;
+      }
+      if (idx === removedImageIndex) continue;
+      if (idx > removedImageIndex) {
+        next[`${questionIndex}_${idx - 1}`] = val;
+      } else {
+        next[key] = val;
+      }
+    }
+    return next;
+  };
+
+  const reindexQuestionImageErrors = (prev, questionIndex, removedImageIndex) => {
+    const next = { ...prev };
+    delete next[`question_${questionIndex}_image_${removedImageIndex}`];
+    const errPrefix = `question_${questionIndex}_image_`;
+    const movers = Object.keys(next)
+      .filter((k) => k.startsWith(errPrefix))
+      .map((k) => {
+        const idx = Number(k.slice(errPrefix.length));
+        return { k, idx };
+      })
+      .filter(({ idx }) => !Number.isNaN(idx) && idx > removedImageIndex)
+      .sort((a, b) => a.idx - b.idx);
+    for (const { k, idx } of movers) {
+      const v = next[k];
+      delete next[k];
+      next[`question_${questionIndex}_image_${idx - 1}`] = v;
+    }
+    return next;
+  };
+
+  const reindexDragOverForQuestion = (dragOverIndex, questionIndex, removedImageIndex) => {
+    if (dragOverIndex == null || dragOverIndex === '') return dragOverIndex;
+    const key = String(dragOverIndex);
+    const lastUs = key.lastIndexOf('_');
+    if (lastUs <= 0) return dragOverIndex;
+    const q = Number(key.slice(0, lastUs));
+    const idx = Number(key.slice(lastUs + 1));
+    if (Number.isNaN(q) || Number.isNaN(idx) || q !== questionIndex) return dragOverIndex;
+    if (idx === removedImageIndex) return null;
+    if (idx > removedImageIndex) return `${questionIndex}_${idx - 1}`;
+    return dragOverIndex;
   };
 
   // Handle image upload
@@ -390,7 +508,14 @@ export default function EditQuiz() {
   const removeImageContainer = (questionIndex, imageIndex) => {
     const currentPictures = getQuestionPictures(formData.questions[questionIndex]);
     if (imageIndex === 0 || currentPictures.length <= 1) return;
-    updateQuestionPictures(questionIndex, currentPictures.filter((_, idx) => idx !== imageIndex));
+    const nextPictures = currentPictures.filter((_, idx) => idx !== imageIndex);
+    updateQuestionPictures(questionIndex, nextPictures);
+    setImagePreviews((prev) => reindexQuestionImageSlotKeys(prev, questionIndex, imageIndex));
+    setImageUrls((prev) => reindexQuestionImageSlotKeys(prev, questionIndex, imageIndex));
+    setUploadingImages((prev) => reindexQuestionImageSlotKeys(prev, questionIndex, imageIndex));
+    setLoadingImages((prev) => reindexQuestionImageSlotKeys(prev, questionIndex, imageIndex));
+    setErrors((prev) => reindexQuestionImageErrors(prev, questionIndex, imageIndex));
+    setDragOverIndex((d) => reindexDragOverForQuestion(d, questionIndex, imageIndex));
   };
 
   // Drag and drop handlers
@@ -696,7 +821,7 @@ export default function EditQuiz() {
       return;
     }
 
-    // Check for duplicate course, courseType, and lesson combination (exclude current quiz)
+    // Check for duplicate course, courseType, lesson, and center (exclude current quiz)
     const courseTrimmed = selectedCourse.trim();
     const courseTypeTrimmed = selectedCourseType ? selectedCourseType.trim() : '';
     const lessonTrimmed = selectedLesson.trim();
@@ -709,11 +834,12 @@ export default function EditQuiz() {
         const quizLesson = (quiz.lesson || '').trim();
         return quizCourse === courseTrimmed && 
                (quizCourseType || '') === courseTypeTrimmed && 
-               quizLesson === lessonTrimmed;
+               quizLesson === lessonTrimmed &&
+               centersMatchDuplicateClient(selectedCenter, quiz.center);
       }
     );
     if (duplicateQuiz) {
-      newErrors.general = '❌ A quiz with this course, course type, and lesson already exists';
+      newErrors.general = '❌ A quiz with this course, course type, lesson, and center already exists';
       setErrors(newErrors);
       
       // Clear error after 6 seconds
@@ -736,6 +862,7 @@ export default function EditQuiz() {
       comment: formData.comment ? formData.comment.trim() : '',
       course: courseTrimmed,
       courseType: courseTypeTrimmed || null,
+      center: selectedCenter.trim() || null,
       lesson: lessonTrimmed,
       quiz_type: formData.quiz_type || 'questions',
       deadline_type: formData.deadline_type,
@@ -850,6 +977,49 @@ export default function EditQuiz() {
           boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
         }}>
           <form onSubmit={handleSubmit}>
+            <div
+              style={{
+                marginBottom: '24px',
+                padding: '18px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                border: '1.5px solid #6ee7b7',
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ fontWeight: 700, color: '#064e3b', marginBottom: '8px', fontSize: '1rem', width: '100%' }}>
+                Import from another quiz
+              </div>
+              <p style={{ margin: '0 0 14px', fontSize: '0.88rem', color: '#047857', lineHeight: 1.45, maxWidth: '520px' }}>
+                Copy content from another quiz into this editor. Save when you are ready.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportSelectedId('');
+                  setImportModalOpen(true);
+                }}
+                style={{
+                  padding: '12px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: '0.95rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(5, 150, 105, 0.35)',
+                  width: '100%',
+                  maxWidth: '320px',
+                }}
+              >
+                Choose quiz to import…
+              </button>
+            </div>
+
             {/* Quiz Grade */}
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', textAlign: 'left' }}>
@@ -868,6 +1038,7 @@ export default function EditQuiz() {
                   setCourseDropdownOpen(!courseDropdownOpen);
                   setCourseTypeDropdownOpen(false);
                   setLessonDropdownOpen(false);
+                  setCenterDropdownOpen(false);
                 }}
                 onClose={() => setCourseDropdownOpen(false)}
                 showAllOption={true}
@@ -898,6 +1069,7 @@ export default function EditQuiz() {
                   setCourseTypeDropdownOpen(!courseTypeDropdownOpen);
                   setCourseDropdownOpen(false);
                   setLessonDropdownOpen(false);
+                  setCenterDropdownOpen(false);
                 }}
                 onClose={() => setCourseTypeDropdownOpen(false)}
               />
@@ -906,6 +1078,26 @@ export default function EditQuiz() {
                   {errors.courseType}
                 </div>
               )}
+            </div>
+
+            {/* Quiz Center (optional) */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', textAlign: 'left' }}>
+                Quiz Center
+              </label>
+              <CenterSelect
+                selectedCenter={selectedCenter}
+                onCenterChange={setSelectedCenter}
+                required={false}
+                isOpen={centerDropdownOpen}
+                onToggle={() => {
+                  setCenterDropdownOpen(!centerDropdownOpen);
+                  setCourseDropdownOpen(false);
+                  setCourseTypeDropdownOpen(false);
+                  setLessonDropdownOpen(false);
+                }}
+                onClose={() => setCenterDropdownOpen(false)}
+              />
             </div>
 
             {/* Quiz Lesson */}
@@ -926,6 +1118,7 @@ export default function EditQuiz() {
                   setLessonDropdownOpen(!lessonDropdownOpen);
                   setCourseDropdownOpen(false);
                   setCourseTypeDropdownOpen(false);
+                  setCenterDropdownOpen(false);
                 }}
                 onClose={() => setLessonDropdownOpen(false)}
                 required={true}
@@ -1378,7 +1571,10 @@ export default function EditQuiz() {
                   <div style={{ fontSize: '0.875rem', color: '#6c757d', marginBottom: '8px' }}>
                     Max size: 10 MB
                   </div>
-                  {getQuestionPictures(question).map((questionImage, imageIdx) => {
+                  {(() => {
+                    const questionPictures = getQuestionPictures(question);
+                    return questionPictures.map((questionImage, imageIdx) => {
+                    const isLastImageSlot = imageIdx === questionPictures.length - 1;
                     const imageKey = `${qIdx}_${imageIdx}`;
                     const hasImage = !!questionImage || !!imagePreviews[imageKey] || !!imageUrls[imageKey];
                     return (
@@ -1407,12 +1603,13 @@ export default function EditQuiz() {
                         )}
                         <div className="image-buttons-container" style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', width: '100%', marginTop: '8px' }}>
                           {imageIdx > 0 && <button type="button" onClick={() => removeImageContainer(qIdx, imageIdx)} style={{ padding: '8px 16px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}><Image src="/trash2.svg" alt="Remove" width={18} height={18} style={{ display: 'inline-block' }} />Remove</button>}
-                          <button type="button" onClick={() => addImageContainer(qIdx)} style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}><Image src="/plus.svg" alt="Add" width={18} height={18} style={{ display: 'inline-block' }} />Add</button>
+                          {isLastImageSlot && <button type="button" onClick={() => addImageContainer(qIdx)} style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}><Image src="/plus.svg" alt="Add" width={18} height={18} style={{ display: 'inline-block' }} />Add</button>}
                         </div>
                         {errors[`question_${qIdx}_image_${imageIdx}`] && <div style={{ color: '#dc3545', fontSize: '0.875rem', marginTop: '4px' }}>{errors[`question_${qIdx}_image_${imageIdx}`]}</div>}
                       </div>
                     );
-                  })}
+                  });
+                  })()}
                 </div>
 
                 {/* Question Text */}
@@ -1722,6 +1919,22 @@ export default function EditQuiz() {
         </div>
       </div>
 
+      <ImportExistingOnlineItemModal
+        open={importModalOpen}
+        onClose={() => {
+          if (!importApplyLoading) setImportModalOpen(false);
+        }}
+        title="Import quiz"
+        description="Pick another quiz to copy into this editor."
+        options={importQuizOptions}
+        selectedValue={importSelectedId}
+        onSelectedValueChange={setImportSelectedId}
+        onApply={handleImportApply}
+        applyLabel="Load"
+        emptyMessage="No other quizzes available."
+        applyLoading={importApplyLoading}
+      />
+
       <style jsx>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
@@ -1753,14 +1966,8 @@ export default function EditQuiz() {
             width: 100%;
           }
           .answer-buttons-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           .image-buttons-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           .answer-option-row {
             flex-direction: column !important;
@@ -1868,14 +2075,8 @@ export default function EditQuiz() {
             font-size: 0.8rem !important;
           }
           .answer-buttons-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           .image-buttons-container button {
-            flex: 1 1 calc(50% - 4px) !important;
-            min-width: calc(50% - 4px) !important;
-            max-width: calc(50% - 4px) !important;
           }
           button[onclick*="addQuestion"] {
             padding: 10px 14px !important;

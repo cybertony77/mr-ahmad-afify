@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import Image from 'next/image';
 import Title from '../../../components/Title';
@@ -11,6 +11,7 @@ import QuizPerformanceChart from '../../../components/QuizPerformanceChart';
 import StudentLessonSelect from '../../../components/StudentLessonSelect';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
+import { clientItemVisibleByCenter } from '../../../lib/studentCenterMatch';
 
 // Input with Button Component (matching manage online system style)
 function InputWithButton(props) {
@@ -31,7 +32,6 @@ function InputWithButton(props) {
     />
   );
 }
-
 
 export default function MyQuizzes() {
   const { data: systemConfig } = useSystemConfig();
@@ -82,9 +82,12 @@ export default function MyQuizzes() {
 
   const quizzes = quizzesData?.quizzes || [];
 
-  // Hide deactivated quizzes from students
-  const visibleQuizzes = quizzes.filter(
-    (quiz) => (quiz.state || quiz.account_state || 'Activated') !== 'Deactivated'
+  const centerFilteredQuizzes = useMemo(
+    () =>
+      quizzes
+        .filter((quiz) => (quiz.state || quiz.account_state || 'Activated') !== 'Deactivated')
+        .filter((q) => clientItemVisibleByCenter(q.center, profile?.main_center)),
+    [quizzes, profile?.main_center]
   );
 
   // Search and filter states
@@ -99,7 +102,7 @@ export default function MyQuizzes() {
     const studentCourse = (profile?.course || '').trim();
     const studentCourseType = (profile?.courseType || '').trim();
     
-    visibleQuizzes.forEach(quiz => {
+    centerFilteredQuizzes.forEach(quiz => {
       if (quiz.lesson && quiz.lesson.trim()) {
         // Check if quiz matches student's course and courseType
         const quizCourse = (quiz.course || '').trim();
@@ -126,7 +129,7 @@ export default function MyQuizzes() {
   const availableLessons = getAvailableLessons();
 
   // Filter quizzes based on search and filters
-  const filteredQuizzes = visibleQuizzes.filter(quiz => {
+  const filteredQuizzes = centerFilteredQuizzes.filter(quiz => {
     // Search filter (by lesson name - case-insensitive)
     if (searchTerm.trim()) {
       const lessonName = quiz.lesson_name || '';
@@ -190,7 +193,7 @@ export default function MyQuizzes() {
 
   // Only show chart lessons that have at least one Activated quiz
   const activeLessons = new Set(
-    visibleQuizzes
+    centerFilteredQuizzes
       .map(quiz => quiz.lesson)
       .filter(Boolean)
   );
@@ -263,11 +266,11 @@ export default function MyQuizzes() {
 
   // Check which quizzes exist in online_quizzes array
   useEffect(() => {
-    if (!profile?.id || quizzes.length === 0 || !Array.isArray(onlineQuizzes)) return;
+    if (!profile?.id || centerFilteredQuizzes.length === 0 || !Array.isArray(onlineQuizzes)) return;
 
     const checkCompletions = () => {
       const completed = new Set();
-      for (const quiz of quizzes) {
+      for (const quiz of centerFilteredQuizzes) {
         // Check if quiz exists in online_quizzes array
         const exists = onlineQuizzes.some(oqz => {
           const qzId = oqz.quiz_id?.toString();
@@ -282,7 +285,7 @@ export default function MyQuizzes() {
     };
 
     checkCompletions();
-  }, [profile?.id, quizzes, onlineQuizzes]);
+  }, [profile?.id, centerFilteredQuizzes, onlineQuizzes]);
 
   // Helper function to get quizDegree for a given week and quiz_id
   const getQuizDegree = (lessonName, quizId = null) => {
@@ -368,7 +371,7 @@ export default function MyQuizzes() {
   useEffect(() => {
     console.log(`[DEADLINE] useEffect triggered - profile?.id: ${profile?.id}, quizzes.length: ${quizzes.length}, profile?.lessons:`, profile?.lessons);
     
-    if (!profile?.id || visibleQuizzes.length === 0) {
+    if (!profile?.id || centerFilteredQuizzes.length === 0) {
       console.log(`[DEADLINE] useEffect early return - missing profile.id or no quizzes`);
       return;
     }
@@ -377,8 +380,8 @@ export default function MyQuizzes() {
     // The API will create the lesson if it doesn't exist
 
     const checkDeadlines = async () => {
-      console.log(`[DEADLINE] Starting deadline check for ${visibleQuizzes.length} quizzes`);
-      for (const quiz of visibleQuizzes) {
+      console.log(`[DEADLINE] Starting deadline check for ${centerFilteredQuizzes.length} quizzes`);
+      for (const quiz of centerFilteredQuizzes) {
         // Only check if quiz has deadline and is not completed
         if (
           quiz.deadline_type === 'with_deadline' &&
@@ -729,7 +732,7 @@ export default function MyQuizzes() {
         </div>
 
         {/* Filters */}
-        {quizzes.length > 0 && (
+        {centerFilteredQuizzes.length > 0 && (
           <div className="filters-container" style={{
             background: 'white',
             borderRadius: 16,
@@ -776,7 +779,7 @@ export default function MyQuizzes() {
           {/* Quizzes List */}
           {filteredQuizzes.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
-              {quizzes.length === 0 ? '❌ No quizzes available.' : '❌ No quizzes match your filters.'}
+              {centerFilteredQuizzes.length === 0 ? '❌ No quizzes available.' : '❌ No quizzes match your filters.'}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
