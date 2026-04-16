@@ -7,8 +7,8 @@ import {
   getR2Config,
 } from '../../../lib/r2Server';
 
-/** Max allowed for SigV4 presigned GET; avoids “URL expired” if clients hold the link */
-const PRESIGN_GET_EXPIRES_SEC = 7 * 24 * 60 * 60; // 7 days
+/** 6h expiry with client-side smart refresh before expiration. */
+const PRESIGN_GET_EXPIRES_SEC = 6 * 60 * 60; // 6 hours
 
 function getKeyFromRequest(req) {
   if (req.method === 'GET') {

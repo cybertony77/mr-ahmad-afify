@@ -1058,6 +1058,7 @@ export default function HomeworksVideos() {
                   <R2VideoPlayer
                     r2Key={selectedVideo.video_ID}
                     videoId={selectedVideo._id}
+                    watermarkText={`${profile?.id || 'unknown'}`}
                     onComplete={handleR2VideoCompleteHomework}
                     onMilestonePercent={
                       selectedVideo.code_settings === 'number_of_views' && selectedVideo.vhc_id

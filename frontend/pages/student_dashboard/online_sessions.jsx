@@ -1104,6 +1104,7 @@ export default function OnlineSessions() {
                   <R2VideoPlayer
                     r2Key={selectedVideo.video_ID}
                     videoId={selectedVideo._id}
+                    watermarkText={`${profile?.id || 'unknown'}`}
                     onComplete={handleR2VideoComplete}
                     onMilestonePercent={
                       selectedVideo.code_settings === 'number_of_views' && selectedVideo.vvc_id

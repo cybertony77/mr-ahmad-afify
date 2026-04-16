@@ -38,7 +38,8 @@ export default async function handler(req, res) {
         CORSRules: [
           {
             AllowedHeaders: ['*'],
-            AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS'],
+            // S3/R2 CORS schema does not accept OPTIONS in AllowedMethods.
+            AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
             AllowedOrigins: allowedOrigins,
             ExposeHeaders: ['ETag', 'Content-Length', 'Content-Type'],
             MaxAgeSeconds: 86400,

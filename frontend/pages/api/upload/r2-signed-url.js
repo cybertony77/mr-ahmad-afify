@@ -8,8 +8,8 @@ import {
   getR2Config,
 } from '../../../lib/r2Server';
 
-/** Long TTL so slow / multi‑GB uploads do not expire mid-transfer */
-const PRESIGN_PUT_EXPIRES_SEC = 4 * 60 * 60; // 4 hours
+/** 6h TTL so slow / multi-GB uploads do not expire mid-transfer */
+const PRESIGN_PUT_EXPIRES_SEC = 6 * 60 * 60; // 6 hours
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     const cfg = getR2Config();
     assertR2Config(cfg);
 
-    await ensureR2CorsForBrowserUploads(cfg);
+    const corsSetup = await ensureR2CorsForBrowserUploads(cfg);
 
     const { fileName, contentType } = req.body;
 
@@ -57,6 +57,7 @@ export default async function handler(req, res) {
       key,
       contentType: contentTypeHeader,
       expiresIn: PRESIGN_PUT_EXPIRES_SEC,
+      corsSetup,
     });
   } catch (error) {
     console.error('R2 signed URL error:', error);

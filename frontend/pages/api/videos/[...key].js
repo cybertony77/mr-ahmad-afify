@@ -1,5 +1,8 @@
 import { S3Client, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { NodeHttpHandler } from '@aws-sdk/node-http-handler';
 import fs from 'fs';
+import http from 'http';
+import https from 'https';
 import path from 'path';
 import { authMiddleware } from '../../../lib/authMiddleware';
 
@@ -44,11 +47,25 @@ const accessKeyId = envConfig.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY_ID;
 const secretAccessKey = envConfig.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_ACCESS_KEY;
 const bucketName = envConfig.R2_BUCKET_NAME || process.env.R2_BUCKET_NAME;
 
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 100,
+});
+
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 100,
+});
+
 const client = new S3Client({
   region: 'auto',
   endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
   credentials: { accessKeyId, secretAccessKey },
   forcePathStyle: true,
+  requestHandler: new NodeHttpHandler({
+    httpAgent,
+    httpsAgent,
+  }),
 });
 
 // ─── Content-Type mapping ─────────────────────────────────────────────────────
@@ -99,8 +116,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Video key is required' });
   }
   const objectKey = key.join('/');
+  console.log('Streaming:', objectKey);
 
   try {
+    req.setTimeout(30000);
+    res.setTimeout(30000);
     const rangeHeader = req.headers.range;
 
     // ── If Range request: fetch just that range ────────────────────────────
@@ -187,6 +207,8 @@ export default async function handler(req, res) {
       req.on('close', cleanup);
       req.on('aborted', cleanup);
       stream.pipe(res);
+      stream.on('end', cleanup);
+      stream.on('close', cleanup);
       stream.on('error', (err) => {
         console.error('Stream error:', err);
         cleanup();
@@ -236,6 +258,8 @@ export default async function handler(req, res) {
       req.on('close', cleanup);
       req.on('aborted', cleanup);
       stream.pipe(res);
+      stream.on('end', cleanup);
+      stream.on('close', cleanup);
       stream.on('error', (err) => {
         console.error('Stream error:', err);
         cleanup();

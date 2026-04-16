@@ -10,6 +10,7 @@ import AccountStateSelect from '../../../../components/AccountStateSelect';
 import R2VideoPlayer from '../../../../components/R2VideoPlayer';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
+import { useProfile } from '../../../../lib/api/auth';
 import { useSystemConfig } from '../../../../lib/api/system';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
@@ -63,6 +64,7 @@ function InputWithButton(props) {
 export default function OnlineSessions() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { data: profile } = useProfile();
   const { data: systemConfig } = useSystemConfig();
   const isOnlineVideosEnabled = systemConfig?.online_videos === true || systemConfig?.online_videos === 'true';
   const [videoPopupOpen, setVideoPopupOpen] = useState(false);
@@ -1025,6 +1027,7 @@ export default function OnlineSessions() {
               {selectedVideo.video_type === 'r2' ? (
                 <R2VideoPlayer
                   r2Key={selectedVideo.video_ID || selectedVideo.video_ID_1 || ''}
+                  watermarkText={`${profile?.id || 'unknown'}`}
                 />
               ) : (
                 <iframe

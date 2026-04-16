@@ -72,13 +72,24 @@ export default function VideoInput({
     setUploadPhase('sending');
 
     try {
+      let corsSetupError = null;
+      try {
+        await axios.post('/api/upload/r2-setup-cors');
+      } catch (setupErr) {
+        corsSetupError =
+          setupErr?.response?.data?.details ||
+          setupErr?.response?.data?.error ||
+          setupErr?.message ||
+          'Unknown CORS setup error';
+      }
+
       // Step 1: Key + presigned PUT URL from our API (also applies bucket CORS when possible)
       const { data } = await axios.post('/api/upload/r2-signed-url', {
         fileName: file.name,
         contentType: file.type || 'application/octet-stream',
       });
 
-      const { signedUrl, key, contentType: signedContentType } = data;
+      const { signedUrl, key, contentType: signedContentType, corsSetup } = data;
       const putContentType = signedContentType || file.type || 'application/octet-stream';
 
       const runXhr = (opts) =>
@@ -119,8 +130,7 @@ export default function VideoInput({
           opts.openSend(xhr);
         });
 
-      // Step 2a: Try browser → R2 direct PUT (fast; needs bucket CORS)
-      // Step 2b: If that fails (CORS, etc.), same-origin POST → our API → R2 (no CORS to R2)
+      // Step 2: Browser -> R2 direct PUT only (no server proxy uploads).
       try {
         await runXhr({
           label: 'direct:',
@@ -132,21 +142,12 @@ export default function VideoInput({
         });
       } catch (directErr) {
         if (directErr.message === 'Upload cancelled') throw directErr;
-
-        setUploadProgress(0);
-        setUploadPhase('sending');
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('key', key);
-
-        await runXhr({
-          label: 'proxy:',
-          openSend: (xhr) => {
-            xhr.open('POST', '/api/upload/r2-proxy-upload');
-            xhr.send(formData);
-          },
-        });
+        const corsDetails = corsSetupError || corsSetup?.error;
+        throw new Error(
+          corsDetails
+            ? `Direct upload blocked by R2 CORS: ${corsDetails}`
+            : 'Direct upload to storage failed. Please check R2 CORS and try again.'
+        );
       }
 
       // Step 3: Success - save the R2 key

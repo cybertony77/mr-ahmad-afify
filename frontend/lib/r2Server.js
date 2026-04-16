@@ -1,6 +1,26 @@
 import fs from 'fs';
 import path from 'path';
 import { PutBucketCorsCommand, S3Client } from '@aws-sdk/client-s3';
+import { NodeHttpHandler } from '@aws-sdk/node-http-handler';
+import http from 'http';
+import https from 'https';
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 100,
+});
+
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 100,
+});
+
+function createR2RequestHandler() {
+  return new NodeHttpHandler({
+    httpAgent,
+    httpsAgent,
+  });
+}
 
 /**
  * Loads env.config from repo root (one level above frontend cwd in dev/build).
@@ -82,6 +102,7 @@ function createR2S3ClientPlain(cfg) {
       secretAccessKey: cfg.secretAccessKey,
     },
     forcePathStyle: true,
+    requestHandler: createR2RequestHandler(),
   });
 }
 
@@ -91,7 +112,10 @@ function createR2S3ClientPlain(cfg) {
  * If this fails (IAM), run POST /api/upload/r2-setup-cors or set CORS in Cloudflare dashboard.
  */
 export async function ensureR2CorsForBrowserUploads(cfg) {
-  if (globalThis.__r2CorsEnsured === true) return;
+  const allowedOrigins = buildR2CorsAllowedOrigins(cfg.envConfig || {});
+  if (globalThis.__r2CorsEnsured === true) {
+    return { ok: true, skipped: true, allowedOrigins };
+  }
 
   try {
     const client = createR2S3ClientPlain(cfg);
@@ -101,8 +125,9 @@ export async function ensureR2CorsForBrowserUploads(cfg) {
         CORSRules: [
           {
             AllowedHeaders: ['*'],
-            AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS'],
-            AllowedOrigins: buildR2CorsAllowedOrigins(cfg.envConfig || {}),
+            // S3/R2 CORS schema does not accept OPTIONS here; preflight is handled automatically.
+            AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
+            AllowedOrigins: allowedOrigins,
             ExposeHeaders: ['ETag', 'Content-Length', 'Content-Type'],
             MaxAgeSeconds: 86400,
           },
@@ -111,8 +136,10 @@ export async function ensureR2CorsForBrowserUploads(cfg) {
     });
     await client.send(command);
     globalThis.__r2CorsEnsured = true;
+    return { ok: true, skipped: false, allowedOrigins };
   } catch (e) {
     console.warn('[R2] ensureR2CorsForBrowserUploads:', e.message);
+    return { ok: false, error: e.message, allowedOrigins };
   }
 }
 
@@ -129,6 +156,7 @@ export function createR2S3ClientForPutPresign(cfg) {
       secretAccessKey: cfg.secretAccessKey,
     },
     forcePathStyle: true,
+    requestHandler: createR2RequestHandler(),
   });
 
   s3Client.middlewareStack.add(
@@ -163,6 +191,7 @@ export function createR2S3ClientForGetPresign(cfg) {
       secretAccessKey: cfg.secretAccessKey,
     },
     forcePathStyle: true,
+    requestHandler: createR2RequestHandler(),
   });
 }
 
