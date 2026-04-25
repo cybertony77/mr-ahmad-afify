@@ -134,7 +134,29 @@ export default function MaterialPage() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {filtered.map((item) => (
-                <div key={item._id} className="material-item" style={{ border: '2px solid #1FA8DC', borderRadius: 12, padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <div
+                  key={item._id}
+                  className="material-item"
+                  style={{
+                    border: '2px solid #e9ecef',
+                    borderRadius: 12,
+                    padding: 20,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#1FA8DC';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(31, 168, 220, 0.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#e9ecef';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
                   <div className="material-item-content" style={{ flex: 1 }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 8 }}>{[item.course, item.courseType, item.center, item.material_name].filter(Boolean).join(' • ')}</div>
                     <div className="material-file-badge" style={{ padding: '12px 16px', border: '2px solid #e9ecef', borderRadius: 8, display: 'inline-block' }}>
@@ -203,6 +225,9 @@ export default function MaterialPage() {
       )}
 
       <style jsx>{`
+        .material-item {
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
         @media (max-width: 768px) {
           .filters-container,
           .material-container {

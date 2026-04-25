@@ -44,7 +44,27 @@ export default function MyMaterial() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {centerFiltered.map((item) => (
-                <div key={item._id} className="homework-item" style={{ border: '2px solid #e9ecef', borderRadius: 12, padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s ease' }}>
+                <div
+                  key={item._id}
+                  className="homework-item"
+                  style={{
+                    border: '2px solid #e9ecef',
+                    borderRadius: 12,
+                    padding: 20,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#1FA8DC';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(31, 168, 220, 0.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#e9ecef';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
                   <div className="material-item-content" style={{ flex: 1 }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 8 }}>{[item.material_name].filter(Boolean).join(' • ')}</div>
                     <div className="material-file-badge" style={{ padding: '12px 16px', backgroundColor: '#ffffff', border: '2px solid #e9ecef', borderRadius: 8, fontSize: '0.95rem', color: '#495057', textAlign: 'left', display: 'inline-block' }}>
@@ -89,6 +109,9 @@ export default function MyMaterial() {
       )}
 
       <style jsx>{`
+        .homework-item {
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
         @media (max-width: 768px) {
           .page-wrapper {
             padding: 10px 5px !important;
