@@ -2,6 +2,7 @@ import "@/styles/globals.css";
 import '@mantine/core/styles.css';
 import '@mantine/carousel/styles.css';
 import { MantineProvider } from '@mantine/core';
+import NextJsApp from 'next/app';
 import { useRouter } from "next/router";
 import { useEffect, useState, useMemo } from "react";
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -1651,3 +1652,11 @@ export default function App({ Component, pageProps }) {
     </QueryClientProvider>
   );
 }
+
+// Ensures Custom App runs with the Pages Router context during `next build`
+// static generation. Without this, `useRouter()` in this file can throw
+// "NextRouter was not mounted" while prerendering pages.
+App.getInitialProps = async (appContext) => {
+  const appProps = await NextJsApp.getInitialProps(appContext);
+  return { ...appProps };
+};

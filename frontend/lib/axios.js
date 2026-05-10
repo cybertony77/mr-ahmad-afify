@@ -5,6 +5,13 @@ import { getApiBaseUrl } from '../config';
 const apiClient = axios.create({
   baseURL: getApiBaseUrl(),
   withCredentials: true, // This ensures cookies are sent with requests
+  // 5 minutes covers slow networks uploading large PDFs/images.
+  // Without an explicit timeout, axios defaults to 0 (infinite) so stuck
+  // sockets would hang forever instead of failing fast.
+  timeout: 5 * 60 * 1000,
+  // Allow large request/response bodies (default is 10MB / 2MB in axios).
+  maxContentLength: 50 * 1024 * 1024,
+  maxBodyLength: 50 * 1024 * 1024,
   headers: {
     'Content-Type': 'application/json',
   },

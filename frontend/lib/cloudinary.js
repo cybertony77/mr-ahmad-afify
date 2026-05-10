@@ -1,134 +1,48 @@
-// Utility functions for Cloudinary signed URLs
+// Helpers for generating Cloudinary signed URLs for PRIVATE-delivery images.
+//
+// IMPORTANT:
+// - Uses the shared, cached Cloudinary configuration in `cloudinaryConfig.js`
+//   so we don't re-read env.config from disk on every render. Image-heavy
+//   pages were calling this dozens of times per request before.
+// - The previous "manual" `getSignedImageUrl(publicId)` function built an
+//   invalid URL (`t_${timestamp}/${publicId}`) and has been removed; always
+//   use the SDK-based helper below.
+
+import { getCloudinary, getCloudinaryCredentials } from './cloudinaryConfig';
+
+const DEFAULT_EXPIRY_SECONDS = 60 * 60; // 1 hour
 
 /**
- * Generate a signed URL for a private Cloudinary image
- * @param {string} publicId - The Cloudinary public_id
- * @returns {string} - Signed URL for the image
+ * Generate a signed URL for a PRIVATE Cloudinary image.
+ *
+ * @param {string} publicId
+ * @param {{ expiresInSeconds?: number, resourceType?: 'image'|'raw'|'video' }} [opts]
+ * @returns {Promise<string|null>}
  */
-export function getSignedImageUrl(publicId) {
+export async function getSignedImageUrlServer(publicId, opts = {}) {
   if (!publicId) return null;
-  
-  // Load Cloudinary config from env.config
-  const fs = require('fs');
-  const path = require('path');
-  
-  function loadEnvConfig() {
-    try {
-      const envPath = path.join(process.cwd(), '..', 'env.config');
-      const envContent = fs.readFileSync(envPath, 'utf8');
-      const envVars = {};
-      
-      envContent.split('\n').forEach(line => {
-        const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith('#')) {
-          const index = trimmed.indexOf('=');
-          if (index !== -1) {
-            const key = trimmed.substring(0, index).trim();
-            let value = trimmed.substring(index + 1).trim();
-            value = value.replace(/^"|"$/g, '');
-            envVars[key] = value;
-          }
-        }
-      });
-      
-      return envVars;
-    } catch (error) {
-      return {};
-    }
-  }
-  
-  const envConfig = loadEnvConfig();
-  const cloudName = envConfig.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME;
-  const apiSecret = envConfig.CLOUDINARY_API_SECRET || process.env.CLOUDINARY_API_SECRET;
-  
-  if (!cloudName || !apiSecret) {
-    console.error('Cloudinary configuration missing');
-    return null;
-  }
-  
-  // Generate signature for signed URL (expires in 1 hour)
-  const timestamp = Math.round(new Date().getTime() / 1000);
-  const expiration = timestamp + 3600; // 1 hour from now
-  
-  // Create signature
-  const crypto = require('crypto');
-  const signature = crypto
-    .createHash('sha1')
-    .update(`public_id=${publicId}&timestamp=${timestamp}${apiSecret}`)
-    .digest('hex');
-  
-  // Build signed URL
-  const url = `https://res.cloudinary.com/${cloudName}/image/private/s--${signature}--/t_${timestamp}/${publicId}`;
-  
-  return url;
-}
 
-/**
- * Generate a signed URL for a private Cloudinary image (server-side)
- * This version uses the Cloudinary SDK for more reliable signing
- */
-export async function getSignedImageUrlServer(publicId) {
-  if (!publicId) return null;
-  
   try {
-    const { v2: cloudinary } = require('cloudinary');
-    const fs = require('fs');
-    const path = require('path');
-    
-    function loadEnvConfig() {
-      try {
-        const envPath = path.join(process.cwd(), '..', 'env.config');
-        const envContent = fs.readFileSync(envPath, 'utf8');
-        const envVars = {};
-        
-        envContent.split('\n').forEach(line => {
-          const trimmed = line.trim();
-          if (trimmed && !trimmed.startsWith('#')) {
-            const index = trimmed.indexOf('=');
-            if (index !== -1) {
-              const key = trimmed.substring(0, index).trim();
-              let value = trimmed.substring(index + 1).trim();
-              value = value.replace(/^"|"$/g, '');
-              envVars[key] = value;
-            }
-          }
-        });
-        
-        return envVars;
-      } catch (error) {
-        return {};
-      }
+    const creds = getCloudinaryCredentials();
+    if (!creds.cloud_name || !creds.api_secret) {
+      console.error('Cloudinary configuration missing');
+      return null;
     }
-    
-    const envConfig = loadEnvConfig();
-    
-    cloudinary.config({
-      cloud_name: envConfig.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: envConfig.CLOUDINARY_API_KEY || process.env.CLOUDINARY_API_KEY,
-      api_secret: envConfig.CLOUDINARY_API_SECRET || process.env.CLOUDINARY_API_SECRET,
-    });
-    
-    // Generate signed URL - use the same method as authenticated access
-    // Cloudinary SDK automatically handles signing and versioning
-    const url = cloudinary.url(publicId, {
+
+    const cloudinary = getCloudinary();
+    const expiresInSeconds = Number.isFinite(opts.expiresInSeconds)
+      ? opts.expiresInSeconds
+      : DEFAULT_EXPIRY_SECONDS;
+
+    return cloudinary.url(publicId, {
       type: 'private',
       sign_url: true,
-      expires_at: Math.round(new Date().getTime() / 1000) + 3600, // 1 hour
+      expires_at: Math.round(Date.now() / 1000) + expiresInSeconds,
       secure: true,
-      resource_type: 'image',
+      resource_type: opts.resourceType || 'image',
     });
-    
-    console.log('🔗 Generated Cloudinary URL:', { 
-      publicId, 
-      url,
-      cloudName: cloudinary.config().cloud_name,
-      urlFormat: url.includes('/s--') ? 'signed' : 'unsigned'
-    });
-    
-    return url;
   } catch (error) {
-    console.error('Error generating signed URL:', error);
+    console.error('Error generating signed Cloudinary URL:', error);
     return null;
   }
 }
-

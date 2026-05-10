@@ -3,9 +3,22 @@ const nextConfig = {
   reactStrictMode: true,
   productionBrowserSourceMaps: false,
   devIndicators: false,
+  // Keep next/image unoptimized for now (we serve Cloudinary URLs that already
+  // expose their own CDN-level optimizations). `remotePatterns` is still
+  // declared so we can flip `unoptimized` off later without code changes.
   images: {
     unoptimized: true,
+    remotePatterns: [
+      { protocol: 'https', hostname: 'res.cloudinary.com' },
+    ],
     domains: ['localhost', '192.168.1.8'],
+  },
+  // Workaround for Windows + Turbopack file watching latency under WSL/OneDrive.
+  // Increase the dev-server keep-alive so very slow Cloudinary uploads (large
+  // PDFs over a poor connection) aren't killed by the Next.js HTTP server
+  // before they complete.
+  experimental: {
+    proxyTimeout: 5 * 60 * 1000, // 5 minutes
   },
   async headers() {
     return [
@@ -29,7 +42,7 @@ const nextConfig = {
           },
         ],
       },
-    // Cache all SVG files for 1 year
+      // Cache all SVG files for 1 year
       {
         source: '/:path*.svg',
         headers: [

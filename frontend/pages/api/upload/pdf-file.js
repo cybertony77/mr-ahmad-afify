@@ -1,44 +1,11 @@
-import { v2 as cloudinary } from 'cloudinary';
-import fs from 'fs';
-import path from 'path';
+import { getCloudinary } from '../../../lib/cloudinaryConfig';
 
-function loadEnvConfig() {
-  try {
-    const envPath = path.join(process.cwd(), '..', 'env.config');
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    const envVars = {};
-    
-    envContent.split('\n').forEach(line => {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#')) {
-        const index = trimmed.indexOf('=');
-        if (index !== -1) {
-          const key = trimmed.substring(0, index).trim();
-          let value = trimmed.substring(index + 1).trim();
-          value = value.replace(/^"|"$/g, '');
-          envVars[key] = value;
-        }
-      }
-    });
-    
-    return envVars;
-  } catch (error) {
-    console.log('Could not read env.config, using process.env as fallback');
-    return {};
-  }
-}
-
-const envConfig = loadEnvConfig();
-
-cloudinary.config({
-  cloud_name: envConfig.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: envConfig.CLOUDINARY_API_KEY || process.env.CLOUDINARY_API_KEY,
-  api_secret: envConfig.CLOUDINARY_API_SECRET || process.env.CLOUDINARY_API_SECRET,
-});
+const cloudinary = getCloudinary();
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_BASE64_SIZE = MAX_FILE_SIZE * 1.4;
 const ALLOWED_FOLDERS = ['HW-PDFs', 'Quizs-PDFs', 'MockExams-PDFs', 'material'];
-const CLOUDINARY_TIMEOUT_MS = 300000; // 5 minutes for slow networks/large payloads
+const CLOUDINARY_TIMEOUT_MS = 300000; // 5 minutes
 const MAX_RETRY_COUNT = 2;
 
 async function uploadPdfWithRetry(file, options) {
@@ -81,32 +48,26 @@ export default async function handler(req, res) {
     }
 
     const base64Data = file.includes(',') ? file.split(',')[1] : file;
-    let fileSize = 0;
-    try {
-      fileSize = Buffer.from(base64Data, 'base64').length;
-    } catch {
-      return res.status(400).json({ error: 'Invalid PDF payload encoding.' });
-    }
+    const fileSize = Buffer.byteLength(base64Data, 'base64');
 
-    if (fileSize > MAX_FILE_SIZE) {
+    if (fileSize > MAX_BASE64_SIZE) {
       return res.status(400).json({ error: 'Max PDF file size is 20 MB.' });
     }
 
     const uploadResult = await uploadPdfWithRetry(file, {
-      folder: folder,
+      folder,
       resource_type: 'raw',
       type: 'upload',
       overwrite: false,
-      // No overwrite => invalidation is unnecessary and slows uploads.
       timeout: CLOUDINARY_TIMEOUT_MS,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       url: uploadResult.secure_url,
     });
   } catch (error) {
-    console.error('Cloudinary PDF upload error:', error);
+    console.error('Cloudinary PDF upload error:', error?.message || error);
 
     if (error.http_code === 400) {
       return res.status(400).json({ error: error.message || 'Invalid PDF file.' });
@@ -116,8 +77,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Cloudinary authentication error. Please contact support.' });
     }
 
-    const errorMessage = error.message || 'Failed to upload PDF. Please try again.';
-    res.status(500).json({ error: errorMessage });
+    return res.status(500).json({ error: error.message || 'Failed to upload PDF. Please try again.' });
   }
 }
 
@@ -127,5 +87,6 @@ export const config = {
       // 20MB binary PDF may exceed 30MB once base64 + JSON overhead are added.
       sizeLimit: '40mb',
     },
+    responseLimit: false,
   },
 };
