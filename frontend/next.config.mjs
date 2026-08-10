@@ -20,6 +20,15 @@ const nextConfig = {
   experimental: {
     proxyTimeout: 30 * 60 * 1000, // 30 minutes for large Cloudinary uploads
   },
+  async redirects() {
+    return [
+      {
+        source: '/dashboard/testimonials',
+        destination: '/dashboard/students_reviews',
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       // Global headers
