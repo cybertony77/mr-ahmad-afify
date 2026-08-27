@@ -2,6 +2,12 @@ import { MongoClient, ObjectId } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../lib/authMiddleware';
+import {
+  isCodeNumberOfDaysValid,
+  computeAccessDeadlineDate,
+} from '../../../lib/codeNumberOfDays';
+import { isDeadlinePassedEgypt } from '../../../lib/deadlineTimeEgypt';
+import { CODE_ERROR, codeErrorPayload } from '../../../lib/verificationCodeMessages';
 
 function loadEnvConfig() {
   try {
@@ -73,34 +79,49 @@ export default async function handler(req, res) {
 
     // Check if code is deactivated
     if (vvcRecord.code_state === 'Deactivated') {
-      return res.status(200).json({ 
-        success: false,
-        error: '❌ Sorry, This code is deactivated',
-        valid: false 
-      });
+      return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.DEACTIVATED));
     }
 
-    // Check if code belongs to another student (for number_of_views)
+    // Check if code belongs to another student (for number_of_views / number_of_days)
     const codeSettings = vvcRecord.code_settings || 'number_of_views';
     if (codeSettings === 'number_of_views') {
-      // Check if code belongs to another student
       if (vvcRecord.viewed_by_who !== null && vvcRecord.viewed_by_who !== studentId) {
-        return res.status(200).json({ 
-          success: false,
-          error: '❌ Sorry, this code is already used by another student',
-          valid: false 
-        });
+        return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.USED_BY_ANOTHER, {
+          code_settings: 'number_of_views',
+        }));
       }
       
-      // Check if views are remaining
       if (vvcRecord.number_of_views === null || vvcRecord.number_of_views <= 0) {
-        return res.status(200).json({ 
-          success: false,
-          error: '❌ Sorry, this code has no views remaining',
-          valid: false 
-        });
+        return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.NO_VIEWS_REMAINING, {
+          code_settings: 'number_of_views',
+        }));
+      }
+    } else if (codeSettings === 'number_of_days') {
+      if (vvcRecord.viewed_by_who !== null && vvcRecord.viewed_by_who !== studentId) {
+        return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.USED_BY_ANOTHER, {
+          code_settings: 'number_of_days',
+        }));
+      }
+      if (!isCodeNumberOfDaysValid(vvcRecord.access_started_at, vvcRecord.number_of_days)) {
+        return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.DAYS_EXPIRED, {
+          code_settings: 'number_of_days',
+        }));
+      }
+    } else if (codeSettings === 'deadline_date' && vvcRecord.deadline_date) {
+      if (isDeadlinePassedEgypt(vvcRecord.deadline_date, null)) {
+        return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.DEADLINE_EXPIRED, {
+          code_settings: 'deadline_date',
+          deadline_date: vvcRecord.deadline_date,
+        }));
       }
     }
+
+    const accessStartedAt = vvcRecord.access_started_at || null;
+    const numberOfDays = vvcRecord.number_of_days ?? null;
+    const computedDeadline =
+      codeSettings === 'number_of_days'
+        ? computeAccessDeadlineDate(accessStartedAt, numberOfDays)
+        : (vvcRecord.deadline_date || null);
 
     return res.status(200).json({ 
       success: true,
@@ -108,16 +129,14 @@ export default async function handler(req, res) {
       vvc_id: vvcRecord._id.toString(),
       code_settings: codeSettings,
       number_of_views: vvcRecord.number_of_views || null,
-      deadline_date: vvcRecord.deadline_date || null,
+      number_of_days: numberOfDays,
+      access_started_at: accessStartedAt,
+      deadline_date: computedDeadline,
       code_lesson: vvcRecord.code_lesson || 'All'
     });
   } catch (error) {
     console.error('❌ Error in VVC get-by-id API:', error);
-    return res.status(500).json({ 
-      success: false,
-      error: 'Internal server error', 
-      details: error.message 
-    });
+    return res.status(500).json(codeErrorPayload('vvc', CODE_ERROR.INTERNAL_ERROR));
   } finally {
     if (client) {
       await client.close();

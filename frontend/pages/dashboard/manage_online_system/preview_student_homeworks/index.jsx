@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/router";
 import Title from '../../../../components/Title';
-import HomeworkPerformanceChart from '../../../../components/HomeworkPerformanceChart';
+import HwChart from '../../../../components/HwChart';
 import { useStudents, useStudent } from '../../../../lib/api/students';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../../../lib/axios';
-import { itemCenterMatchesStudentMainCenter } from '../../../../lib/studentCenterMatch';
 import Image from 'next/image';
+import { useNationalSystem, getCourseFieldLabels } from '../../../../lib/api/system';
 
 export default function PreviewStudentHomeworks() {
+  const isNational = useNationalSystem();
+  const courseLabels = getCourseFieldLabels(isNational);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [studentId, setStudentId] = useState("");
@@ -38,34 +40,7 @@ export default function PreviewStudentHomeworks() {
     enabled: !!searchId && !!student,
   });
 
-  // Fetch all homeworks to check state for filtering
-  const { data: allHomeworksData } = useQuery({
-    queryKey: ['all-homeworks'],
-    queryFn: async () => {
-      const response = await apiClient.get('/api/homeworks');
-      return response.data;
-    },
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchOnMount: false,
-  });
-
-  const allHomeworks = allHomeworksData?.homeworks || [];
-
-  // Activated homework lessons for this student's main center only (chart cross-check)
-  const activeLessons = useMemo(() => {
-    const lessonSet = new Set();
-    const mainCenter = student?.main_center;
-    allHomeworks.forEach((homework) => {
-      if (!itemCenterMatchesStudentMainCenter(homework.center, mainCenter)) return;
-      const itemState = homework.state || homework.account_state || 'Activated';
-      if (itemState === 'Activated' && homework.lesson) lessonSet.add(homework.lesson);
-    });
-    return lessonSet;
-  }, [allHomeworks, student?.main_center]);
-
-  // Fetch homework performance chart data using API endpoint
+  // Same chart source as Student Info: performance API + lessons.homework_degree fallback
   const { data: performanceData, isLoading: isChartLoading } = useQuery({
     queryKey: ['homework-performance', searchId],
     queryFn: async () => {
@@ -86,21 +61,15 @@ export default function PreviewStudentHomeworks() {
     retry: 1,
   });
 
-  const rawChartData = performanceData?.chartData || [];
-
-  // Filter chart data to only include Activated lessons
-  const chartData = useMemo(() => {
-    if (!Array.isArray(rawChartData) || rawChartData.length === 0) return [];
-    if (activeLessons.size === 0) return rawChartData; // If no active lessons, show all
-    
-    return rawChartData.filter(item => {
-      const label = (item.lesson_name || item.lesson || '').toString().toLowerCase();
-      if (!label) return false;
-      return Array.from(activeLessons).some(lesson =>
-        label.includes(String(lesson).toLowerCase())
-      );
-    });
-  }, [rawChartData, activeLessons]);
+  const chartData = performanceData?.chartData ?? [];
+  const homeworkLessons = useMemo(() => {
+    const lessons = student?.lessons;
+    if (!lessons) return [];
+    return Object.keys(lessons).map((key) => ({
+      lesson: key,
+      ...(lessons[key] || {}),
+    }));
+  }, [student?.lessons]);
 
   // Reset homework mutation
   const resetHomeworkMutation = useMutation({
@@ -112,8 +81,10 @@ export default function PreviewStudentHomeworks() {
     },
     onSuccess: () => {
       refetchHomeworks();
-      // Invalidate and refetch chart data
       queryClient.invalidateQueries({ queryKey: ['homework-performance', searchId] });
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['student-with-rankings'] });
+      queryClient.invalidateQueries({ queryKey: ['scoring-history'] });
       setResettingId(null);
     },
     onError: (err) => {
@@ -592,7 +563,7 @@ export default function PreviewStudentHomeworks() {
                     {s.name} (ID: {s.id})
                   </div>
                   <div style={{ fontSize: "0.9rem", color: "#6c757d" }}>
-                    {[s.course, s.courseType, s.main_center].filter(Boolean).join(' • ')}
+                    {[s.course, !isNational && s.courseType, s.main_center].filter(Boolean).join(' • ')}
                   </div>
                 </button>
               ))}
@@ -614,15 +585,17 @@ export default function PreviewStudentHomeworks() {
                   <div className="detail-label">Full Name</div>
                   <div className="detail-value">{student.name}</div>
                 </div>
+                {courseLabels.showGradeField && (
                 <div className="detail-item">
                   <div className="detail-label">Grade</div>
                   <div className="detail-value">{student.grade}</div>
                 </div>
+                )}
                 <div className="detail-item">
-                  <div className="detail-label">Course</div>
+                  <div className="detail-label">{courseLabels.course}</div>
                   <div className="detail-value">{student.course || 'N/A'}</div>
                 </div>
-                {student.courseType && (
+                {courseLabels.showCourseType && student.courseType && (
                   <div className="detail-item">
                     <div className="detail-label">Course Type</div>
                     <div className="detail-value" style={{ textTransform: 'capitalize' }}>{student.courseType}</div>
@@ -656,7 +629,11 @@ export default function PreviewStudentHomeworks() {
                     Loading chart data...
                   </div>
                 ) : (
-                  <HomeworkPerformanceChart chartData={chartData} height={400} />
+                  <HwChart
+                    lessons={homeworkLessons}
+                    chartData={chartData}
+                    chartLoading={isChartLoading}
+                  />
                 )}
               </div>
             )}

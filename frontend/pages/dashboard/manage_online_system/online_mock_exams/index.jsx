@@ -12,10 +12,11 @@ import CenterSelect from '../../../../components/CenterSelect';
 import MockExamSelect from '../../../../components/MockExamSelect';
 import TimerSelect from '../../../../components/TimerSelect';
 import AccountStateSelect from '../../../../components/AccountStateSelect';
-import { useSystemConfig } from '../../../../lib/api/system';
+import { useSystemConfig , useNationalSystem, getCourseFieldLabels} from '../../../../lib/api/system';
 import { TextInput, ActionIcon, useMantineTheme } from '@mantine/core';
 import { IconSearch, IconArrowRight } from '@tabler/icons-react';
 import HomeworkAnalyticsChart from '../../../../components/HomeworkAnalyticsChart';
+import AnalyticsModal from '../../../../components/AnalyticsModal';
 import { formatDeadlineCardLabel } from '../../../../lib/deadlineTimeEgypt';
 const PdfViewerModal = dynamic(() => import('../../../../components/PdfViewerModal'), { ssr: false });
 
@@ -39,6 +40,8 @@ function InputWithButton(props) {
 }
 
 export default function MockExams() {
+  const isNational = useNationalSystem();
+  const courseLabels = getCourseFieldLabels(isNational);
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: systemConfig } = useSystemConfig();
@@ -343,7 +346,7 @@ export default function MockExams() {
           }}>
             <div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
               <label className="filter-label" style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#495057', fontSize: '0.95rem' }}>
-                Filter by Course
+                {courseLabels.filterByCourse}
               </label>
               <CourseSelect
                 selectedGrade={filterCourse}
@@ -361,7 +364,8 @@ export default function MockExams() {
                 showAllOption={true}
               />
             </div>
-            <div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
+            {courseLabels.showCourseType && (
+<div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
               <label className="filter-label" style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#495057', fontSize: '0.95rem' }}>
                 Filter by Course Type
               </label>
@@ -380,6 +384,7 @@ export default function MockExams() {
                 onClose={() => setFilterCourseTypeDropdownOpen(false)}
               />
             </div>
+)}
             <div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
               <label className="filter-label" style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#495057', fontSize: '0.95rem' }}>
                 Filter by Center
@@ -519,7 +524,7 @@ export default function MockExams() {
                 >
                   <div className="item-info" style={{ flex: '1 1 260px', minWidth: 0, maxWidth: '100%' }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: '600', marginBottom: '8px', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                      {[mockExam.course, mockExam.courseType, mockExam.center, mockExam.lesson, mockExam.lesson_name].filter(Boolean).join(' • ')}
+                      {[mockExam.course, !isNational && mockExam.courseType, mockExam.center, mockExam.lesson, mockExam.lesson_name].filter(Boolean).join(' • ')}
                     </div>
                     <div style={{ color: '#6c757d', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       {mockExam.mock_exam_type === 'pdf' ? (
@@ -656,102 +661,17 @@ export default function MockExams() {
           )}
         </div>
 
-        {/* Analytics Modal */}
-        {analyticsOpen && (
-          <div 
-            className="analytics-modal-overlay"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                closeAnalytics();
-              }
-            }}
-          >
-            <div
-              className="analytics-modal-content"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Close Button */}
-              <button 
-                className="analytics-close-btn" 
-                onClick={closeAnalytics} 
-                aria-label="Close"
-              >
-                <Image src="/close-cross.svg" alt="Close" width={35} height={35} />
-              </button>
-
-              <div className="analytics-header">
-                <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-                  <Image src="/chart2.svg" alt="Analytics" width={32} height={32} />
-                  Mock Exam Analytics
-                </h2>
-                {selectedMockExamForAnalytics && (
-                  <p className="analytics-subtitle">
-                    {[selectedMockExamForAnalytics.course, selectedMockExamForAnalytics.courseType, selectedMockExamForAnalytics.center, selectedMockExamForAnalytics.lesson, selectedMockExamForAnalytics.lesson_name].filter(Boolean).join(' • ')}
-                  </p>
-                )}
-              </div>
-            
-              {analyticsLoading ? (
-                <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-                  <div style={{
-                    width: "50px",
-                    height: "50px",
-                    border: "4px solid rgba(31, 168, 220, 0.2)",
-                    borderTop: "4px solid #1FA8DC",
-                    borderRadius: "50%",
-                    margin: "0 auto 20px",
-                    animation: "spin 1s linear infinite"
-                  }} />
-                  <p style={{ color: "#6c757d", fontSize: "1rem" }}>Loading analytics...</p>
-                </div>
-              ) : analyticsData?.analytics ? (
-                <div style={{ marginBottom: '-25px' }}>
-                  <HomeworkAnalyticsChart analyticsData={analyticsData.analytics} />
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6c757d' }}>
-                  No analytics data available
-                </div>
-              )}
-
-              {/* Statistics Grid - At the End */}
-              {analyticsData?.analytics && !analyticsLoading && (
-                <div className="analytics-stats-grid">
-                  <div className="analytics-stat-item">
-                    <div className="analytics-stat-value" style={{ color: '#a71e2a' }}>
-                      {analyticsData.analytics.notAnswered}
-                    </div>
-                    <div className="analytics-stat-label">Not Answered</div>
-                  </div>
-                  <div className="analytics-stat-item">
-                    <div className="analytics-stat-value" style={{ color: '#dc3545' }}>
-                      {analyticsData.analytics.lessThan50}
-                    </div>
-                    <div className="analytics-stat-label">&lt; 50%</div>
-                  </div>
-                  <div className="analytics-stat-item">
-                    <div className="analytics-stat-value" style={{ color: '#17a2b8' }}>
-                      {analyticsData.analytics.between50And100}
-                    </div>
-                    <div className="analytics-stat-label">50-99%</div>
-                  </div>
-                  <div className="analytics-stat-item">
-                    <div className="analytics-stat-value" style={{ color: '#28a745' }}>
-                      {analyticsData.analytics.exactly100}
-                    </div>
-                    <div className="analytics-stat-label">100%</div>
-                  </div>
-                  <div className="analytics-stat-item">
-                    <div className="analytics-stat-value" style={{ color: '#212529' }}>
-                      {analyticsData.analytics.totalStudents}
-                    </div>
-                    <div className="analytics-stat-label">Total Students</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        <AnalyticsModal
+          open={analyticsOpen}
+          onClose={closeAnalytics}
+          title="Mock Exam Analytics"
+          subtitle={selectedMockExamForAnalytics
+            ? [selectedMockExamForAnalytics.course, selectedMockExamForAnalytics.courseType, selectedMockExamForAnalytics.center, selectedMockExamForAnalytics.lesson, selectedMockExamForAnalytics.lesson_name].filter(Boolean).join(' • ')
+            : ''}
+          analyticsData={analyticsData}
+          analyticsLoading={analyticsLoading}
+          ChartComponent={HomeworkAnalyticsChart}
+        />
 
         {/* Confirmation Modal */}
         {confirmDeleteOpen && (
@@ -832,7 +752,6 @@ export default function MockExams() {
             </div>
           </div>
         )}
-      </div>
 
       <style jsx>{`
         .analytics-modal-overlay {
@@ -1263,6 +1182,7 @@ export default function MockExams() {
         fileName={pdfViewer.name}
         onClose={() => setPdfViewer({ isOpen: false, url: '', name: '' })}
       />
+      </div>
     </div>
   );
 }

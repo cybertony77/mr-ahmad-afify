@@ -2,6 +2,12 @@ import { MongoClient, ObjectId } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../lib/authMiddleware';
+import {
+  isCodeNumberOfDaysValid,
+  computeAccessDeadlineDate,
+} from '../../../lib/codeNumberOfDays';
+import { isDeadlinePassedEgypt } from '../../../lib/deadlineTimeEgypt';
+import { CODE_ERROR, codeErrorPayload } from '../../../lib/verificationCodeMessages';
 
 function loadEnvConfig() {
   try {
@@ -57,19 +63,11 @@ export default async function handler(req, res) {
     const { VVC, session_id, lesson } = req.body;
 
     if (!VVC || VVC.length !== 9) {
-      return res.status(400).json({ 
-        success: false,
-        error: '❌ Sorry, Wrong VVC, recheck your VVC',
-        valid: false 
-      });
+      return res.status(400).json(codeErrorPayload('vvc', CODE_ERROR.INVALID_LENGTH));
     }
 
     if (!session_id) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Session ID is required',
-        valid: false 
-      });
+      return res.status(400).json(codeErrorPayload('vvc', CODE_ERROR.SESSION_ID_REQUIRED));
     }
 
     client = await MongoClient.connect(MONGO_URI);
@@ -84,31 +82,21 @@ export default async function handler(req, res) {
     });
 
     if (!vvcRecord) {
-      return res.status(200).json({ 
-        success: false,
-        error: '❌ Sorry, Wrong VVC, recheck your VVC',
-        valid: false 
-      });
+      return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.WRONG_CODE));
     }
 
     // Check if code is deactivated
     if (vvcRecord.code_state === 'Deactivated') {
-      return res.status(200).json({ 
-        success: false,
-        error: '❌ Sorry, this code is deactivated',
-        valid: false 
-      });
+      return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.DEACTIVATED));
     }
 
     // Check lesson restriction
     const codeLesson = vvcRecord.code_lesson || 'All';
     if (codeLesson !== 'All' && lesson) {
       if (normalizeLessonName(codeLesson) !== normalizeLessonName(lesson)) {
-        return res.status(200).json({
-          success: false,
-          error: '❌ Sorry, Wrong VVC, recheck your VVC',
-          valid: false
-        });
+        return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.WRONG_LESSON, {
+          code_settings: vvcRecord.code_settings || 'number_of_views',
+        }));
       }
     }
 
@@ -116,32 +104,24 @@ export default async function handler(req, res) {
     const codeSettings = vvcRecord.code_settings || 'number_of_views'; // Default to number_of_views for backward compatibility
     if (codeSettings === 'deadline_date') {
       if (vvcRecord.deadline_date) {
-        // Parse date in local timezone to avoid timezone shift
-        let deadlineDate;
-        if (typeof vvcRecord.deadline_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(vvcRecord.deadline_date)) {
-          // If it's a string in YYYY-MM-DD format, parse it in local timezone
-          const [year, month, day] = vvcRecord.deadline_date.split('-').map(Number);
-          deadlineDate = new Date(year, month - 1, day);
-        } else if (vvcRecord.deadline_date instanceof Date) {
-          // If it's already a Date object, use it directly
-          deadlineDate = new Date(vvcRecord.deadline_date);
-        } else {
-          // Try to parse as date string
-          deadlineDate = new Date(vvcRecord.deadline_date);
+        // Date-only deadline: active through end of that Africa/Cairo day
+        if (isDeadlinePassedEgypt(vvcRecord.deadline_date, null)) {
+          return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.DEADLINE_EXPIRED, {
+            code_settings: 'deadline_date',
+            deadline_date: vvcRecord.deadline_date,
+          }));
         }
-        
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        deadlineDate.setHours(0, 0, 0, 0);
-        
-        // Allow use until the end of the deadline day (deadlineDate < today means expired)
-        if (deadlineDate < today) {
-          return res.status(200).json({ 
-            success: false,
-            error: '❌ Sorry, This code is expired',
-            valid: false 
-          });
-        }
+      }
+    } else if (codeSettings === 'number_of_days') {
+      if (vvcRecord.viewed_by_who !== null && vvcRecord.viewed_by_who !== studentId) {
+        return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.USED_BY_ANOTHER, {
+          code_settings: 'number_of_days',
+        }));
+      }
+      if (!isCodeNumberOfDaysValid(vvcRecord.access_started_at, vvcRecord.number_of_days)) {
+        return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.DAYS_EXPIRED, {
+          code_settings: 'number_of_days',
+        }));
       }
     } else {
       // Check if code is valid for number_of_views
@@ -150,20 +130,16 @@ export default async function handler(req, res) {
 
       // No views remaining
       if (vvcRecord.number_of_views === null || vvcRecord.number_of_views <= 0) {
-        return res.status(200).json({ 
-          success: false,
-          error: '❌ Sorry, this code has no views remaining',
-          valid: false 
-        });
+        return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.NO_VIEWS_REMAINING, {
+          code_settings: 'number_of_views',
+        }));
       }
 
       // Code is already assigned to a different student
       if (vvcRecord.viewed_by_who !== null && vvcRecord.viewed_by_who !== studentId) {
-        return res.status(200).json({ 
-          success: false,
-          error: '❌ Sorry, this code is already used by another student',
-          valid: false 
-        });
+        return res.status(200).json(codeErrorPayload('vvc', CODE_ERROR.USED_BY_ANOTHER, {
+          code_settings: 'number_of_views',
+        }));
       }
     }
 
@@ -186,10 +162,17 @@ export default async function handler(req, res) {
     // VVC is valid - update it and save to student's online_sessions
     // For deadline_date: don't set viewed/viewed_by_who, allow unlimited views
     // For number_of_views: set viewed/viewed_by_who, but don't decrement views here (decrement when video opens)
+    // For number_of_days: set viewed_by_who + access_started_at on first use
     const updateData = {};
     if (codeSettings === 'number_of_views') {
       updateData.viewed = true;
       updateData.viewed_by_who = studentId;
+    } else if (codeSettings === 'number_of_days') {
+      updateData.viewed = true;
+      updateData.viewed_by_who = studentId;
+      if (!vvcRecord.access_started_at) {
+        updateData.access_started_at = new Date().toISOString();
+      }
     }
     // For deadline_date, we don't set viewed/viewed_by_who to allow unlimited views until deadline
     
@@ -202,21 +185,13 @@ export default async function handler(req, res) {
     }
 
     if (updateResult.matchedCount === 0) {
-      return res.status(500).json({ 
-        success: false,
-        error: 'Failed to update VVC',
-        valid: false 
-      });
+      return res.status(500).json(codeErrorPayload('vvc', CODE_ERROR.INTERNAL_ERROR));
     }
 
     // Get student
     const student = await db.collection('students').findOne({ id: studentId });
     if (!student) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Student not found',
-        valid: false 
-      });
+      return res.status(404).json(codeErrorPayload('vvc', CODE_ERROR.NOT_FOUND));
     }
 
     // Ensure online_sessions array exists
@@ -267,6 +242,12 @@ export default async function handler(req, res) {
 
     // Get current VVC to return relevant data
     const updatedVvc = await db.collection('VVC').findOne({ _id: vvcRecord._id });
+    const accessStartedAt = updatedVvc.access_started_at || null;
+    const numberOfDays = updatedVvc.number_of_days ?? null;
+    const computedDeadline =
+      codeSettings === 'number_of_days'
+        ? computeAccessDeadlineDate(accessStartedAt, numberOfDays)
+        : (updatedVvc.deadline_date || null);
 
     return res.status(200).json({ 
       success: true,
@@ -276,16 +257,13 @@ export default async function handler(req, res) {
       code_settings: codeSettings,
       code_lesson: codeLesson,
       number_of_views: updatedVvc.number_of_views || null,
-      deadline_date: updatedVvc.deadline_date || null
+      number_of_days: numberOfDays,
+      access_started_at: accessStartedAt,
+      deadline_date: computedDeadline
     });
   } catch (error) {
     console.error('❌ Error in VVC check API:', error);
-    return res.status(500).json({ 
-      success: false,
-      error: 'Internal server error', 
-      valid: false,
-      details: error.message 
-    });
+    return res.status(500).json(codeErrorPayload('vvc', CODE_ERROR.INTERNAL_ERROR));
   } finally {
     if (client) {
       await client.close();

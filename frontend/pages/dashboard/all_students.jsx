@@ -12,7 +12,7 @@ import { SessionTable } from "../../components/SessionTable.jsx";
 import { IconArrowRight, IconSearch, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { ActionIcon, TextInput, useMantineTheme } from '@mantine/core';
 import { useStudentsPaginated } from '../../lib/api/students';
-import { useSystemConfig } from '../../lib/api/system';
+import { useSystemConfig, useNationalSystem, getCourseFieldLabels } from '../../lib/api/system';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
 
 export function InputWithButton({ onButtonClick, onKeyDown, ...props }) {
@@ -57,6 +57,8 @@ export function InputWithButton({ onButtonClick, onKeyDown, ...props }) {
 
 export default function AllStudents() {
   const { data: systemConfig } = useSystemConfig();
+  const isNational = useNationalSystem();
+  const courseLabels = getCourseFieldLabels(isNational);
   const isScoringEnabled = systemConfig?.scoring_system === true || systemConfig?.scoring_system === 'true';
   const isPaymentSystemEnabled = systemConfig?.payment_system === true || systemConfig?.payment_system === 'true';
   
@@ -295,7 +297,7 @@ export default function AllStudents() {
         <div className="filters-container">
           <div className="filter-row">
             <div className="filter-group">
-              <label className="filter-label">Filter by Course</label>
+              <label className="filter-label">{courseLabels.filterByCourse}</label>
               <CourseSelect
                 selectedGrade={selectedCourse}
                 onGradeChange={(course) => {
@@ -312,6 +314,7 @@ export default function AllStudents() {
                 onClose={() => setOpenDropdown(null)}
               />
             </div>
+            {courseLabels.showCourseType && (
             <div className="filter-group">
               <label className="filter-label">Filter by Course Type</label>
               <CourseTypeSelect
@@ -330,6 +333,7 @@ export default function AllStudents() {
                 onClose={() => setOpenDropdown(null)}
               />
             </div>
+            )}
             <div className="filter-group">
               <label className="filter-label">Filter by Center</label>
               <CenterSelect
@@ -348,6 +352,7 @@ export default function AllStudents() {
                 onClose={() => setOpenDropdown(null)}
               />
             </div>
+            {courseLabels.showGradeField && (
             <div className="filter-group">
               <label className="filter-label">Filter by Grade</label>
               <GradeSelect
@@ -366,6 +371,7 @@ export default function AllStudents() {
                 onClose={() => setOpenDropdown(null)}
               />
             </div>
+            )}
           </div>
           
 
@@ -393,6 +399,7 @@ export default function AllStudents() {
           <SessionTable
             data={students}
             height={400}
+            compactOnMobile
             showMainCenter={true}
             showGrade={true}
             showCourse={true}
@@ -661,6 +668,7 @@ export default function AllStudents() {
             }
             .history-container {
               padding: 16px;
+              overflow-x: hidden;
             }
             .history-title {
               font-size: 1.3rem;
@@ -673,6 +681,7 @@ export default function AllStudents() {
             }
             .history-container {
               padding: 12px;
+              overflow-x: hidden;
             }
             .history-title {
               font-size: 1.2rem;

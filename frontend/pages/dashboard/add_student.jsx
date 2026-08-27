@@ -9,13 +9,16 @@ import CourseTypeSelect from '../../components/CourseTypeSelect';
 import AccountStateSelect from '../../components/AccountStateSelect';
 import GenderSelect from '../../components/GenderSelect';
 import Title from '../../components/Title';
-import { useCreateStudent } from '../../lib/api/students';
+import { useCreateStudent, useCheckStudentPhone } from '../../lib/api/students';
+import { useNationalSystem, getCourseFieldLabels } from '../../lib/api/system';
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { formatPhoneForDB, validateEgyptPhone, handleEgyptPhoneKeyDown } from '../../lib/phoneUtils';
 
 
 export default function AddStudent() {
+  const isNational = useNationalSystem();
+  const courseLabels = getCourseFieldLabels(isNational);
   const containerRef = useRef(null);
   const [form, setForm] = useState({
     id: "",
@@ -24,9 +27,8 @@ export default function AddStudent() {
     gender: "",
     grade: "",
     course: "",
-    courseType: "basics to advanced", // Default to basics
+    courseType: "",
     school: "",
-    homeschooling: false,
     phone: "",
     parentsPhone: "",
     main_center: "",
@@ -146,6 +148,10 @@ export default function AddStudent() {
   
   // React Query hook for creating students
   const createStudentMutation = useCreateStudent();
+  const phoneCheck = useCheckStudentPhone(form.phone);
+  const phoneReady = formatPhoneForDB(form.phone).length >= 11;
+  const phoneTaken = phoneReady && !phoneCheck.isLoading && phoneCheck.data?.exists === true;
+  const phoneAvailable = phoneReady && !phoneCheck.isLoading && phoneCheck.data?.exists === false;
 
   // Check if student ID is available
   const checkStudentId = async (id) => {
@@ -189,11 +195,45 @@ export default function AddStudent() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const isPhoneFilled = (phone) => {
+    const formatted = formatPhoneForDB(phone);
+    return Boolean(formatted && formatted.length > 2);
+  };
+
+  const areRequiredFieldsFilled = () => {
+    if (configLoading) return false;
+    if (withPhysicalCard && !form.id?.trim()) return false;
+    if (!form.name?.trim()) return false;
+    if (!form.gender?.trim()) return false;
+    if (!isNational && !form.grade?.trim()) return false;
+    if (!form.course?.trim()) return false;
+    if (!isNational && !form.courseType?.trim()) return false;
+    if (!form.school?.trim()) return false;
+    if (!isPhoneFilled(form.phone) || !isPhoneFilled(form.parentsPhone)) return false;
+    if (!form.main_center?.trim()) return false;
+    if (!form.account_state?.trim()) return false;
+    return true;
+  };
+
+  const canSubmit =
+    areRequiredFieldsFilled() &&
+    !createStudentMutation.isPending &&
+    !phoneTaken &&
+    !(phoneReady && phoneCheck.isLoading);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setSuccess(false);
+
+    if (phoneTaken) {
+      setError("This phone number is already used, please use another one");
+      return;
+    }
+    if (phoneReady && (phoneCheck.isLoading || !phoneCheck.data)) {
+      setError("Please wait while we check the phone number");
+      return;
+    }
     
     // Validate custom ID only if WITH_PHISICAL_CARD is true
     if (withPhysicalCard) {
@@ -235,20 +275,20 @@ export default function AddStudent() {
       return;
     }
     
-    // Validate grade (required)
-    if (!form.grade || form.grade.trim() === '') {
+    // Validate grade (required) — skipped for national system
+    if (!isNational && (!form.grade || form.grade.trim() === '')) {
       setError("Please select a grade");
       return;
     }
 
     // Validate course (required)
     if (!form.course || form.course.trim() === '') {
-      setError("Please select a course");
+      setError(isNational ? "Please select a grade" : "Please select a course");
       return;
     }
     
-    // Validate courseType (required)
-    if (!form.courseType || form.courseType.trim() === '') {
+    // Validate courseType (required) — skipped for national system
+    if (!isNational && (!form.courseType || form.courseType.trim() === '')) {
       setError("Please select a course type");
       return;
     }
@@ -256,16 +296,16 @@ export default function AddStudent() {
     // Map parentsPhone to parents_phone for backend - preserve leading zeros by storing as strings
     const payload = { ...form, parents_phone: parentPhone };
     payload.phone = studentPhone; // Keep as string to preserve leading zeros exactly
-    
-    // Handle school field based on homeschooling checkbox
-    if (form.homeschooling) {
-      payload.school = "Homeschooling";
+
+    if (isNational) {
+      payload.grade = null;
+      payload.courseType = null;
     }
     
     // Course is now separate from grade
-    // course: EST/SAT/ACT (from CourseSelect)
-    // courseType: basics/advanced (from CourseTypeSelect)
-    // grade: required field (like "Grade 10")
+    // course: EST/SAT/ACT (from CourseSelect) — labeled Grade when national
+    // courseType: basics/advanced (from CourseTypeSelect) — hidden when national
+    // grade: required field (like "Grade 10") — hidden when national
     
     // Optional main_comment: send as main_comment field
     const mc = form.comment && form.comment.trim() !== '' ? form.comment.trim() : null;
@@ -319,7 +359,6 @@ export default function AddStudent() {
           course: "",
           courseType: "basics",
           school: "",
-          homeschooling: false,
           phone: "",
           parentsPhone: "",
           main_center: "",
@@ -364,7 +403,6 @@ export default function AddStudent() {
       course: "",
       courseType: "basics",
       school: "",
-      homeschooling: false,
       phone: "",
       parentsPhone: "",
       main_center: "",
@@ -573,7 +611,7 @@ Best regards
           .submit-btn {
             width: 100%;
             padding: 16px;
-            background: linear-gradient(135deg, #87CEEB 0%, #B0E0E6 100%);
+            background: linear-gradient(135deg, #15b0ef 0%, #15d0e7 100%);
             color: white;
             border: none;
             border-radius: 10px;
@@ -581,12 +619,21 @@ Best regards
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 16px rgba(135, 206, 235, 0.3);
+            box-shadow: 0 4px 16px rgba(21, 176, 239, 0.35);
             margin-top: 8px;
           }
-          .submit-btn:hover {
+          .submit-btn:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(135, 206, 235, 0.4);
+            box-shadow: 0 6px 20px rgba(21, 176, 239, 0.45);
+          }
+          .submit-btn:disabled {
+            background: linear-gradient(135deg, #87ceeb 0%, #b0e0e6 100%);
+            color: rgba(255, 255, 255, 0.9);
+            opacity: 1;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+            filter: none;
           }
           .id-feedback {
             margin-top: 8px;
@@ -609,6 +656,15 @@ Best regards
             background: #d4edda;
             color: #155724;
             border: 1px solid #c3e6cb;
+          }
+          .error-border {
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1) !important;
+          }
+          :global(.phone-error .form-control),
+          :global(.phone-input.error-border) {
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1) !important;
           }
           .error-border {
             border-color: #dc3545 !important;
@@ -711,7 +767,7 @@ Best regards
             box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
           }
           .whatsapp-vac-btn {
-            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+            background: rgb(37, 211, 102);
             color: white;
             border: none;
             border-radius: 12px;
@@ -720,7 +776,7 @@ Best regards
             font-size: 1rem;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 6px 20px rgba(37, 211, 102, 0.4);
+            box-shadow: 0 6px 20px rgba(37, 211, 102, 0.35);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -730,8 +786,7 @@ Best regards
           }
           .whatsapp-vac-btn:hover {
             transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(37, 211, 102, 0.5);
-            background: linear-gradient(135deg, #20c85a 0%, #0f7a6b 100%);
+            box-shadow: 0 8px 25px rgba(37, 211, 102, 0.45);
           }
           .whatsapp-vac-btn:active {
             transform: translateY(-1px);
@@ -819,6 +874,7 @@ Best regards
                 onClose={() => setGenderDropdownOpen(false)}
               />
             </div>
+            {courseLabels.showGradeField && (
             <div className="form-group">
               <label>Grade <span style={{color: 'red'}}>*</span></label>
               <GradeSelect
@@ -829,8 +885,9 @@ Best regards
                 onClose={() => setOpenDropdown(null)}
               />
             </div>
+            )}
             <div className="form-group">
-              <label>Course <span style={{color: 'red'}}>*</span></label>
+              <label>{courseLabels.course} <span style={{color: 'red'}}>*</span></label>
               <CourseSelect 
                 selectedGrade={form.course} 
                 onGradeChange={(course) => handleChange({ target: { name: 'course', value: course } })} 
@@ -840,6 +897,7 @@ Best regards
                 onClose={() => setOpenDropdown(null)}
               />
             </div>
+            {courseLabels.showCourseType && (
             <div className="form-group">
               <label>Course Type <span style={{color: 'red'}}>*</span></label>
               <CourseTypeSelect 
@@ -851,24 +909,9 @@ Best regards
                 onClose={() => setOpenDropdown(null)}
               />
             </div>
+            )}
             <div className="form-group">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
               <label>School <span style={{color: 'red'}}>*</span></label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px', fontWeight: 'normal', color: '#666' }}>
-                  <input
-                    type="checkbox"
-                    name="homeschooling"
-                    checked={form.homeschooling}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      handleChange({ target: { name: 'homeschooling', value: isChecked } });
-                    }}
-                    style={{ margin: 0 }}
-                  />
-                  Homeschooling
-                </label>
-              </div>
-              {!form.homeschooling && (
               <input
                 className="form-input"
                 name="school"
@@ -878,7 +921,6 @@ Best regards
                 required
                 autocomplete="off"
               />
-              )}
             </div>
             <div className="form-group">
               <label>Phone <span style={{color: 'red'}}>*</span></label>
@@ -891,12 +933,31 @@ Best regards
                   setForm({ ...form, phone: validation.value });
                 }}
                 onKeyDown={(e) => handleEgyptPhoneKeyDown(e, form.phone)}
-                containerClass="phone-container"
-                inputClass="phone-input"
+                containerClass={`phone-container ${phoneTaken ? 'phone-error' : ''}`}
+                inputClass={`phone-input ${phoneTaken ? 'error-border' : ''}`}
                 buttonClass="phone-flag-btn"
                 dropdownClass="phone-dropdown"
                 placeholder="Enter Phone Number"
               />
+              {phoneReady && (
+                <div>
+                  {phoneCheck.isLoading && (
+                    <div className="id-feedback checking">
+                      🔍 Checking availability...
+                    </div>
+                  )}
+                  {phoneTaken && (
+                    <div className="id-feedback taken">
+                      ❌ This phone number is already used, use another one
+                    </div>
+                  )}
+                  {phoneAvailable && (
+                    <div className="id-feedback available">
+                      ✅ This phone number is available
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="form-group">
               <label>Parent's Phone (Whatsapp) <span style={{color: 'red'}}>*</span></label>
@@ -946,8 +1007,10 @@ Best regards
           </div>
             <button 
               type="submit" 
-              disabled={createStudentMutation.isPending || configLoading || (withPhysicalCard && (idChecking || (idError && !idValid)))} 
+              disabled={!canSubmit}
               className="submit-btn"
+              title={canSubmit ? 'Add student' : 'Fill all required fields to enable'}
+              aria-disabled={!canSubmit}
             >
               {createStudentMutation.isPending ? "Adding..." : "Add Student"}
             </button>
@@ -1037,6 +1100,7 @@ Best regards
                   {copiedVac ? 'Copied!' : 'Copy VAC Code'}
                 </button>
                 <button
+                  type="button"
                   onClick={handleSendWhatsApp}
                   className="whatsapp-vac-btn"
                   title="Send VAC code via WhatsApp"

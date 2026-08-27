@@ -13,6 +13,7 @@ export default function Dashboard() {
   const isGoogleJoinMeetingEnabled = systemConfig?.google_join_meeting === true || systemConfig?.google_join_meeting === 'true';
   const isPaymentSystemEnabled = systemConfig?.payment_system === true || systemConfig?.payment_system === 'true';
   const isCertificatesEnabled = systemConfig?.certificates === true || systemConfig?.certificates === 'true';
+  const isDesmosEnabled = systemConfig?.desmos_integrations === true || systemConfig?.desmos_integrations === 'true';
 
   useEffect(() => {
     // Authentication is now handled by _app.js with HTTP-only cookies
@@ -242,6 +243,16 @@ export default function Dashboard() {
           <Image src="/history.svg" alt="History" width={20} height={20} />
           History
         </button>
+        {isDesmosEnabled && (
+          <button
+            type="button"
+            className="dashboard-btn"
+            onClick={() => router.push('/dashboard/desmos_config')}
+          >
+            <Image src="/calculator.svg" alt="Desmos Calculator" width={20} height={20} />
+            Desmos Calculator
+          </button>
+        )}
         {isCertificatesEnabled && (
           <button
             className="dashboard-btn certificate-btn"

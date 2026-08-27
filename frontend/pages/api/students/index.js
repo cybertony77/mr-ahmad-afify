@@ -48,9 +48,18 @@ const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://loc
 const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'demo-attendance-system';
 const SYSTEM_SCORING_SYSTEM = envConfig.SYSTEM_SCORING_SYSTEM === 'true' || process.env.SYSTEM_SCORING_SYSTEM === 'true';
 const WITH_PHISICAL_CARD = envConfig.WITH_PHISICAL_CARD === 'true';
+const NATIONAL_SYSTEM = envConfig.NATIONAL_SYSTEM === 'true' || process.env.NATIONAL_SYSTEM === 'true';
 
 console.log('🔗 Final MONGO_URI being used:', MONGO_URI.replace(/:[^:@]*@/, ':****@'));
 console.log('🔗 Final DB_NAME being used:', DB_NAME);
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function exactMatchRegex(value) {
+  return new RegExp(`^${escapeRegExp(value)}$`, 'i');
+}
 
 // Auth middleware is now imported from shared utility
 
@@ -206,23 +215,23 @@ export default async function handler(req, res) {
         }
         
         if (gradeFilter) {
-          queryFilter.grade = { $regex: new RegExp(`^${gradeFilter}$`, 'i') };
+          queryFilter.grade = { $regex: exactMatchRegex(gradeFilter) };
         }
         
         if (courseFilter) {
-          queryFilter.course = { $regex: new RegExp(`^${courseFilter}$`, 'i') };
+          queryFilter.course = { $regex: exactMatchRegex(courseFilter) };
         }
         
         if (centerFilter) {
-          queryFilter.main_center = { $regex: new RegExp(`^${centerFilter}$`, 'i') };
+          queryFilter.main_center = { $regex: exactMatchRegex(centerFilter) };
         }
         
         if (courseTypeFilter) {
-          queryFilter.courseType = { $regex: new RegExp(`^${courseTypeFilter}$`, 'i') };
+          queryFilter.courseType = { $regex: exactMatchRegex(courseTypeFilter) };
         }
         
         if (genderFilter) {
-          queryFilter.gender = { $regex: new RegExp(`^${genderFilter}$`, 'i') };
+          queryFilter.gender = { $regex: exactMatchRegex(genderFilter) };
         }
         
         console.log('🔍 Query filter:', JSON.stringify(queryFilter, null, 2));
@@ -488,8 +497,15 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'Student ID is required when WITH_PHISICAL_CARD is enabled' });
         }
         
-        if (!name || !grade || !course || !phone || !parents_phone || !main_center || age === undefined || !gender || !school) {
-          return res.status(400).json({ error: 'All fields are required (name, grade, course, phone, parents_phone, main_center, age, gender, school)' });
+        const missingCore =
+          !name || !course || !phone || !parents_phone || !main_center || age === undefined || !gender || !school;
+        const missingGrade = !NATIONAL_SYSTEM && !grade;
+        if (missingCore || missingGrade) {
+          return res.status(400).json({
+            error: NATIONAL_SYSTEM
+              ? 'All fields are required (name, course/grade, phone, parents_phone, main_center, age, gender, school)'
+              : 'All fields are required (name, grade, course, phone, parents_phone, main_center, age, gender, school)',
+          });
         }
         
         // Check if the custom ID is already used
@@ -502,7 +518,10 @@ export default async function handler(req, res) {
       } else {
         // If WITH_PHISICAL_CARD is false, auto-generate ID (last student ID + 1)
         // Ignore id field completely - don't validate it even if it's sent
-        if (!name || !grade || !course || !phone || !parents_phone || !main_center || age === undefined || !gender || !school) {
+        const missingCore =
+          !name || !course || !phone || !parents_phone || !main_center || age === undefined || !gender || !school;
+        const missingGrade = !NATIONAL_SYSTEM && !grade;
+        if (missingCore || missingGrade) {
           return res.status(400).json({ error: 'All fields are required' });
         }
         
@@ -519,6 +538,39 @@ export default async function handler(req, res) {
           newId++;
           existingStudent = await db.collection('students').findOne({ id: newId });
         }
+      }
+
+      // Normalize and enforce unique student phone
+      const normalizePhone = (phoneValue) => {
+        if (!phoneValue) return '';
+        let p = String(phoneValue).replace(/[^0-9]/g, '');
+        if (p.match(/^(012|011|010|015)/)) {
+          p = '20' + p.substring(1);
+        }
+        if (p.startsWith('20') && p.length > 2 && p[2] === '0') {
+          p = '20' + p.substring(3);
+        }
+        return p;
+      };
+      const phoneVariants = (normalized) => {
+        const variants = new Set([normalized]);
+        if (normalized.startsWith('20') && normalized.length > 2) {
+          const local = normalized.substring(2);
+          variants.add(local);
+          variants.add('0' + local);
+        }
+        return Array.from(variants).filter(Boolean);
+      };
+
+      const normalizedPhone = normalizePhone(phone);
+      if (!normalizedPhone || normalizedPhone.length < 8) {
+        return res.status(400).json({ error: 'Please enter a valid student phone number' });
+      }
+      const phoneTaken = await db.collection('students').findOne({
+        phone: { $in: phoneVariants(normalizedPhone) },
+      });
+      if (phoneTaken) {
+        return res.status(409).json({ error: 'This phone number is already used by another student' });
       }
       
       // New students start with empty lessons object (not weeks array)
@@ -550,11 +602,11 @@ export default async function handler(req, res) {
         id: newId,
         name,
         gender,
-        grade: grade || null, // Grade is optional (like "Grade 10")
-        course: course || null, // Course is required (EST, SAT, ACT)
-        courseType: courseType || "basics", // Course type defaults to basics
+        grade: grade || null, // GradeSelect field; not required when NATIONAL_SYSTEM
+        course: course || null, // Course/Grade from CourseSelect (EST, SAT, ACT, etc.)
+        courseType: NATIONAL_SYSTEM ? null : (courseType || "basics"),
         school,
-        phone,
+        phone: normalizedPhone,
         parentsPhone: parents_phone,
         main_center,
         main_comment: (main_comment ?? comment ?? null),
