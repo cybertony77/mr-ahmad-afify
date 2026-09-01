@@ -46,7 +46,7 @@ export default function Header() {
             height={60}
             style={{ 
               borderRadius: '50%', 
-              background: '#1FA8DC', 
+              background: 'white', 
               boxShadow: '0 2px 8px rgba(31,168,220,0.10)',
               objectFit: 'cover',
               objectPosition: 'center',

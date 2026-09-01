@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useQuery } from '@tanstack/react-query';
-import { Burger, Drawer } from '@mantine/core';
-import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { useProfile, useProfilePicture } from '../lib/api/auth';
 import { useSubscription } from '../lib/api/subscription';
 import { useStudent } from '../lib/api/students';
@@ -13,65 +11,24 @@ import StudentLinksModal from './StudentLinksModal';
 import AppVideosModal from './AppVideosModal';
 import apiClient from '../lib/axios';
 import Image from 'next/image';
-import styles from '../styles/UserMenu.module.css';
-
-function MenuItem({
-  icon,
-  children,
-  onClick,
-  danger = false,
-  badge,
-  expanded,
-  end,
-  controls,
-}) {
-  return (
-    <button
-      type="button"
-      className={`${styles.menuItem}${danger ? ` ${styles.danger}` : ''}`}
-      onClick={onClick}
-      aria-expanded={expanded === undefined ? undefined : expanded}
-      aria-controls={controls}
-    >
-      <span className={styles.iconBox}>
-        <Image src={icon} alt="" width={19} height={19} />
-      </span>
-      <span className={styles.label}>{children}</span>
-      {badge !== undefined && badge !== null ? (
-        <span className={styles.badge} aria-label={`${badge} pending reviews`}>
-          {badge}
-        </span>
-      ) : null}
-      {end}
-    </button>
-  );
-}
-
-function MenuSection({ title, children }) {
-  return (
-    <section className={styles.menuSection} aria-labelledby={`menu-section-${title.toLowerCase()}`}>
-      <h2 id={`menu-section-${title.toLowerCase()}`} className={styles.sectionTitle}>
-        {title}
-      </h2>
-      <div className={styles.menuList}>{children}</div>
-    </section>
-  );
-}
 
 export default function UserMenu() {
-  const [opened, { toggle, close }] = useDisclosure(false);
-  const isMobileMenu = useMediaQuery('(max-width: 768px)');
+  const [open, setOpen] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showInstallApp, setShowInstallApp] = useState(false);
   const [showLinksModal, setShowLinksModal] = useState(false);
   const [showAppVideos, setShowAppVideos] = useState(false);
   const [showOther, setShowOther] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const menuRef = useRef(null);
+  const otherRef = useRef(null);
+  const otherHoverTimer = useRef(null);
   const router = useRouter();
   
   // Use React Query to get user profile data
-  const { data: user } = useProfile();
-  const { data: profilePictureUrl } = useProfilePicture();
+  const { data: user, isLoading, error } = useProfile();
   const { data: subscription } = useSubscription();
+  const { data: profilePictureUrl } = useProfilePicture();
   const { data: systemConfig } = useSystemConfig();
   const isNational = useNationalSystem();
   const courseLabels = getCourseFieldLabels(isNational);
@@ -213,13 +170,65 @@ export default function UserMenu() {
   }, [subscription, userData.role, router, isSubscriptionEnabled]);
 
   useEffect(() => {
-    if (!opened) setShowOther(false);
-  }, [opened]);
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    if (open) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  // Desktop vs mobile: Other submenu only at 580px+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 580px)');
+    const update = () => {
+      setIsDesktop(mq.matches);
+      if (!mq.matches) setShowOther(false);
+    };
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  // Close the "Other" submenu when the main menu closes
+  useEffect(() => {
+    if (!open) setShowOther(false);
+  }, [open]);
+
+  // Close the "Other" submenu when clicking outside of it
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (otherRef.current && !otherRef.current.contains(e.target)) {
+        setShowOther(false);
+      }
+    }
+    if (showOther) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showOther]);
+
+  useEffect(() => {
+    return () => {
+      if (otherHoverTimer.current) clearTimeout(otherHoverTimer.current);
+    };
+  }, []);
 
   const isStaff =
     userData.role === 'admin' ||
     userData.role === 'developer' ||
     userData.role === 'assistant';
+
+  const useOtherMenu = isStaff && isDesktop;
+
+  const openOther = () => {
+    if (otherHoverTimer.current) clearTimeout(otherHoverTimer.current);
+    setShowOther(true);
+  };
+
+  const closeOtherSoon = () => {
+    if (otherHoverTimer.current) clearTimeout(otherHoverTimer.current);
+    otherHoverTimer.current = setTimeout(() => setShowOther(false), 150);
+  };
 
   const handleLogout = async () => {
     try {
@@ -252,320 +261,377 @@ export default function UserMenu() {
   };
 
   const handleMyQRCode = () => {
-    close(); // Close the menu
+    setOpen(false); // Close the menu
     setShowQRModal(true);
   };
 
   const handleInstallApp = () => {
-    close(); // Close the menu
+    setOpen(false); // Close the menu
     setShowInstallApp(true);
   };
 
+
   return (
-    <div className={styles.root}>
-      <div className={`${styles.burgerWrap} ${opened ? styles.burgerWrapOpen : ''} ${isMobileMenu ? styles.burgerWrapMobile : ''}`}>
-        <Burger
-          lineSize={isMobileMenu ? 1.75 : 2}
-          size={isMobileMenu ? 'md' : 'lg'}
-          opened={opened}
-          onClick={toggle}
-          aria-label="Toggle navigation"
-          aria-expanded={opened}
-        />
-      </div>
-      <Drawer
-        opened={opened}
-        onClose={close}
-        position="right"
-        size="min(400px, 80vw)"
-        padding="md"
-        zIndex={10000}
-        overlayProps={{
-          backgroundOpacity: 0.34,
-          blur: 4,
-          color: '#26b5eb',
+    <div style={{ position: 'relative', marginRight: 32 }} ref={menuRef}>
+      <div
+        style={{
+          width: 50,
+          height: 50,
+          borderRadius: '50%',
+          background: profilePictureUrl ? 'transparent' : '#e9ecef',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          boxShadow: open ? '0 2px 8px rgba(31,168,220,0.15)' : 'none',
+          border: open ? '2px solid #1FA8DC' : '2px solid #e9ecef',
+          transition: 'box-shadow 0.2s, border 0.2s',
+          overflow: 'hidden',
+          position: 'relative'
         }}
-        transitionProps={{
-          transition: 'slide-left',
-          duration: 280,
-          timingFunction: 'cubic-bezier(.22, 1, .36, 1)',
-        }}
-        title="Menu"
-        classNames={{
-          content: styles.drawerContent,
-          header: styles.drawerHeader,
-          body: styles.drawerBody,
-          title: styles.drawerTitle,
-          close: styles.drawerClose,
-        }}
+        onClick={() => setOpen((v) => !v)}
+        title={userData.name || userData.id}
       >
-          <div className={styles.profileSection}>
-            <div className={styles.avatar}>
-                {profilePictureUrl ? (
-                  <Image
-                    src={profilePictureUrl}
-                    alt="Profile"
-                    width={58}
-                    height={58}
-                    className={styles.avatarImage}
-                    unoptimized
-                  />
-                ) : (
-                  <span className={styles.avatarLetter}>
-                    {String(studentData?.name || userData.name || userData.id || 'U').charAt(0).toUpperCase()}
-                  </span>
-                )}
-            </div>
-            <div className={styles.profileInfo}>
-                {userData.role === 'student' && studentData ? (
-                  <>
-                    <p className={styles.profileName}>{studentData.name || 'Student'}</p>
-                    <p className={styles.profileMeta}>
-                      <Image src="/user-circle3.svg" alt="" width={16} height={16} />
-                      ID: {studentData.id}
-                    </p>
-                    {(studentData.course || studentData.grade) && (
-                      <p className={styles.profileMeta}>
-                        {courseLabels.course}: {studentData.course || studentData.grade}
-                      </p>
-                    )}
-                    {courseLabels.showCourseType && studentData.courseType && (
-                      <p className={styles.profileMeta}>Course Type: {studentData.courseType}</p>
-                    )}
-                    {studentData.main_center && (
-                      <p className={styles.profileMeta}>Main Center: {studentData.main_center}</p>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <p className={styles.profileName}>{userData.name || userData.id}</p>
-                    <p className={styles.profileMeta}>
-                      <Image src="/user-circle3.svg" alt="" width={16} height={16} />
-                      {userData.id ? `Username: ${userData.id}` : 'No Username'}
-                    </p>
-                  </>
-                )}
-            </div>
-          </div>
-          {isSubscriptionEnabled && subscription && userData.role !== 'student' && (
-            <div className={styles.subscriptionStatus}>
-              {/* Show "Subscription Expired" only if active = false AND date_of_expiration = null */}
-              {subscription.active === false && !subscription.date_of_expiration ? (
-                <div className={styles.subscriptionExpired}>
-                  <Image src="/alert-triangle2.svg" alt="" width={18} height={18} />
-                  Subscription Expired
-                </div>
-              ) : subscription.date_of_expiration && timeRemaining !== null ? (
-                <div>
-                  <div className={styles.subscriptionLabel}>
-                    <Image src="/clock.svg" alt="" width={16} height={16} />
-                    Subscription time remaining:
-                  </div>
-                  <div className={styles.subscriptionTimer}>
-                    <span>{String(timeRemaining.days || 0).padStart(2, '0')}</span>
-                    <span className={styles.timerUnit}> days : </span>
-                    <span>{String(timeRemaining.hours || 0).padStart(2, '0')}</span>
-                    <span className={styles.timerUnit}> hours : </span>
-                    <span>{String(timeRemaining.minutes || 0).padStart(2, '0')}</span>
-                    <span className={styles.timerUnit}> min : </span>
-                    <span>{String(timeRemaining.seconds || 0).padStart(2, '0')}</span>
-                    <span className={styles.timerUnit}> sec</span>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          )}
-          {userData.role === 'student' && (
-            <MenuSection title="Account">
-              <MenuItem icon="/logout.svg" onClick={handleLogout} danger>
-                Logout
-              </MenuItem>
-              <MenuItem
-                icon="/user-circle3.svg"
-                onClick={() => {
-                  close();
-                  router.push('/student_dashboard/my_info');
-                }}
-              >
-                My Information
-              </MenuItem>
-              <MenuItem
-                icon="/link.svg"
-                onClick={() => {
-                  close();
-                  setShowLinksModal(true);
-                }}
-              >
-                Social Media Links
-              </MenuItem>
-              <MenuItem icon="/key2.svg" onClick={handleChangePassword}>
-                Change My Password
-              </MenuItem>
-              <MenuItem icon="/qrcode3.svg" onClick={handleMyQRCode}>
-                My Qr Code
-              </MenuItem>
-            </MenuSection>
-          )}
-          {userData.role !== 'student' && (
-            <>
-              <MenuSection title="Account">
-                <MenuItem icon="/logout.svg" onClick={handleLogout} danger>
-                  Logout
-                </MenuItem>
-                <MenuItem icon="/user-edit2.svg" onClick={handleEditProfile}>
-                  Edit My Profile
-                </MenuItem>
-                <MenuItem
-                  icon="/link.svg"
-                  onClick={() => {
-                    close();
-                    router.push('/dashboard/public_link_generator');
-                  }}
-                >
-                  Public Link Generator
-                </MenuItem>
-              </MenuSection>
-              {isStaff && (
-                <MenuSection title="Management">
-                {(userData.role === 'admin' || userData.role === 'developer') && (
-                  <MenuItem icon="/settings.svg" onClick={handleManageAssistants}>
-                    Manage Assistants
-                  </MenuItem>
-                )}
-                <MenuItem
-                  icon="/settings2.svg"
-                  onClick={() => {
-                    close();
-                    router.push('/dashboard/manage_online_system');
-                  }}
-                >
-                  Manage Online System
-                </MenuItem>
-                {showMarketingPageMenu && (
-                  <MenuItem
-                    icon="/marketing.svg"
-                    onClick={() => {
-                      close();
-                      router.push('/welcome');
-                    }}
-                  >
-                    Manage Marketing Page
-                  </MenuItem>
-                )}
-                {isMarketingSystemEnabled && (
-                  <MenuItem
-                    icon="/testimonials2.svg"
-                    onClick={() => {
-                      close();
-                      router.push('/dashboard/students_reviews');
-                    }}
-                    badge={publicTestimonialsPending > 99 ? '99+' : publicTestimonialsPending || undefined}
-                  >
-                    Manage Students Reviews
-                  </MenuItem>
-                )}
-                {isScoringEnabled && (
-                  <MenuItem
-                    icon="/star4.svg"
-                    onClick={() => {
-                      close();
-                      router.push('/dashboard/manage_scoring_system');
-                    }}
-                  >
-                    Manage Scoring System
-                  </MenuItem>
-                )}
-                </MenuSection>
-              )}
-              {isSubscriptionEnabled && userData.role === 'developer' && (
-                <MenuSection title="System">
-                  <MenuItem icon="/dollar.svg" onClick={handleSubscriptionDashboard}>
-                    Subscription Dashboard
-                  </MenuItem>
-                </MenuSection>
-              )}
-            </>
-          )}
-          <MenuSection title="Support">
-            {isStaff ? (
+        {/* Use profile picture if available, else fallback to initial */}
+        {profilePictureUrl ? (
+          <Image
+            src={profilePictureUrl}
+            alt="Profile"
+            fill
+            style={{
+              objectFit: 'cover',
+              borderRadius: '50%'
+            }}
+            unoptimized
+          />
+        ) : (
+        <span style={{ 
+          fontWeight: 700, 
+          fontSize: 22, 
+          color: '#1FA8DC',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          height: '100%',
+          lineHeight: 1,
+          textAlign: 'center'
+        }}>
+          {(() => {
+            const displayName = userData.role === 'student' && studentData?.name 
+              ? studentData.name 
+              : userData.name;
+            const displayId = userData.role === 'student' && studentData?.id 
+              ? studentData.id.toString() 
+              : userData.id?.toString();
+            
+            if (displayName && displayName.length > 0) {
+              return displayName[0].toUpperCase();
+            } else if (displayId && displayId.length > 0) {
+              return displayId[0].toUpperCase();
+            }
+            return 'U';
+          })()}
+        </span>
+        )}
+      </div>
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: 54,
+          right: 25,
+          minWidth: 270,
+          background: '#fff',
+          borderRadius: 16,
+          boxShadow: '0 8px 32px rgba(31,168,220,0.18)',
+          border: '1.5px solid #e9ecef',
+          zIndex: 10000,
+          padding: '0 0 8px 0',
+        }}>
+          <div style={{
+            padding: '18px 20px 12px 20px',
+            borderBottom: '1px solid #e9ecef',
+            textAlign: 'left',
+            marginBottom: 8
+          }}>
+            {userData.role === 'student' && studentData ? (
               <>
-                <MenuItem
-                  icon="/other.svg"
-                  onClick={() => setShowOther((value) => !value)}
-                  expanded={showOther}
-                  controls="user-menu-other-items"
-                  end={
-                    <span className={styles.accordionIndicator} aria-hidden="true">
-                      {showOther ? '⌃' : '⌄'}
-                    </span>
-                  }
-                >
-                  Other
-                </MenuItem>
-                {showOther && (
-                  <div
-                    id="user-menu-other-items"
-                    className={styles.subItems}
-                    role="region"
-                    aria-label="Other menu items"
-                  >
-                    <MenuItem
-                      icon="/message.svg"
-                      onClick={() => {
-                        close();
-                        router.push('/contact_assistants');
-                      }}
-                    >
-                      Contact Assistants
-                    </MenuItem>
-                    <MenuItem icon="/message2.svg" onClick={handleContactDeveloper}>
-                      Contact Developer
-                    </MenuItem>
-                    <MenuItem
-                      icon="/video.svg"
-                      onClick={() => {
-                        close();
-                        setShowAppVideos(true);
-                      }}
-                    >
-                      App Videos
-                    </MenuItem>
-                    <MenuItem icon="/download.svg" onClick={handleInstallApp}>
-                      Install App
-                    </MenuItem>
+                <div style={{ fontWeight: 800, fontSize: 18, color: '#1FA8DC', marginBottom: 8 }}>
+                  {studentData.name || 'Student'}
+                </div>
+                <div style={{ color: '#495057', fontSize: 15, fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Image src="/user-circle3.svg" alt="User" width={18} height={18} />
+                  ID: {studentData.id}
+                </div>
+                {(studentData.course || studentData.grade) && (
+                  <div style={{ color: '#495057', fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+                    {courseLabels.course}: {studentData.course || studentData.grade}
+                  </div>
+                )}
+                {courseLabels.showCourseType && studentData.courseType && (
+                  <div style={{ color: '#495057', fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+                    Course Type: {studentData.courseType}
+                  </div>
+                )}
+                {studentData.main_center && (
+                  <div style={{ color: '#495057', fontSize: 15, fontWeight: 600 }}>
+                    Main Center: {studentData.main_center}
                   </div>
                 )}
               </>
             ) : (
               <>
-                <MenuItem
-                  icon="/message.svg"
-                  onClick={() => {
-                    close();
-                    router.push('/contact_assistants');
-                  }}
-                >
-                  Contact Assistants
-                </MenuItem>
-                <MenuItem icon="/message2.svg" onClick={handleContactDeveloper}>
-                  Contact Developer
-                </MenuItem>
-                <MenuItem
-                  icon="/video.svg"
-                  onClick={() => {
-                    close();
-                    setShowAppVideos(true);
-                  }}
-                >
-                  App Videos
-                </MenuItem>
-                <MenuItem icon="/download.svg" onClick={handleInstallApp}>
-                  Install App
-                </MenuItem>
+                <div style={{ fontWeight: 800, fontSize: 18, color: '#1FA8DC', marginBottom: 2 }}>{userData.name || userData.id}</div>
+                <div style={{ color: '#495057', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Image src="/user-circle3.svg" alt="User" width={18} height={18} />
+                  {userData.id ? `Username: ${userData.id}` : 'No Username'}
+                </div>
               </>
             )}
-          </MenuSection>
-      </Drawer>
+          </div>
+          {isSubscriptionEnabled && subscription && userData.role !== 'student' && (
+            <div style={{
+              padding: '12px 20px',
+              borderBottom: '1px solid #e9ecef',
+              marginBottom: 8
+            }}>
+              {/* Show "Subscription Expired" only if active = false AND date_of_expiration = null */}
+              {subscription.active === false && !subscription.date_of_expiration ? (
+                <div style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: '#dc3545',
+                  lineHeight: 1.4
+                }}>
+                  <Image src="/alert-triangle2.svg" alt="alert" width={20} height={20} style={{ marginRight: '5px' , transform: "translateY(5px)" }} />
+                  Subscription Expired
+                </div>
+              ) : subscription.date_of_expiration && timeRemaining !== null ? (
+                <div style={{
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: '#495057',
+                  lineHeight: 1.4
+                }}>
+                  <div style={{ marginBottom: 4, color: '#313437', fontSize: 15 }}>
+                    <Image src="/clock.svg" alt="Clock" width={18} height={18} style={{ marginRight: '5px' , transform: "translateY(3px)" }} />
+                    Subscription time remaining:</div>
+                  <div style={{ 
+                    fontFamily: 'Courier New, monospace',
+                    letterSpacing: 0.5,
+                    fontSize: 15
+                  }}>
+                    <span style={{ color: '#1fa8dc', fontSize: 15 }}>{String(timeRemaining.days || 0).padStart(2, '0')}</span>
+                    <span style={{ color: '#ed2929', fontSize: 15 }}> days : </span>
+                    <span style={{ color: '#1fa8dc', fontSize: 15 }}>{String(timeRemaining.hours || 0).padStart(2, '0')}</span>
+                    <span style={{ color: '#ed2929', fontSize: 15 }}> hours : </span>
+                    <span style={{ color: '#1fa8dc', fontSize: 15 }}>{String(timeRemaining.minutes || 0).padStart(2, '0')}</span>
+                    <span style={{ color: '#ed2929', fontSize: 15 }}> min : </span>
+                    <span style={{ color: '#1fa8dc', fontSize: 15 }}>{String(timeRemaining.seconds || 0).padStart(2, '0')}</span>
+                    <span style={{ color: '#ed2929', fontSize: 15 }}> sec</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+          <button style={menuBtnStyle} onClick={handleLogout}>
+            <Image src="/logout.svg" alt="Logout" width={20} height={20} style={{ marginRight: '8px', filter: 'brightness(0) saturate(100%) invert(27%) sepia(95%) saturate(6871%) hue-rotate(349deg) brightness(93%) contrast(86%)' }} />
+            Logout
+          </button>
+          {userData.role === 'student' && (
+            <>
+              <button
+                style={menuBtnStyle}
+                onClick={() => {
+                  setOpen(false);
+                  setShowLinksModal(true);
+                }}
+              >
+                <Image src="/link.svg" alt="Links" width={20} height={20} style={{ marginRight: '8px' }} />
+                Social Media Links
+              </button>
+              <button style={menuBtnStyle} onClick={handleChangePassword}>
+                <Image src="/key2.svg" alt="Password" width={20} height={20} style={{ marginRight: '8px' }} />
+                Change My Password
+              </button>
+              <button style={menuBtnStyle} onClick={handleMyQRCode}>
+                <Image src="/qrcode3.svg" alt="QR Code" width={20} height={20} style={{ marginRight: '8px' }} />
+                My Qr Code
+              </button>
+            </>
+          )}
+          {userData.role !== 'student' && (
+            <>
+              <button style={menuBtnStyle} onClick={handleEditProfile}>
+                <Image src="/user-edit2.svg" alt="Edit Profile" width={20} height={20} style={{ marginRight: '8px' }} />
+                Edit My Profile
+              </button>
+              <button style={menuBtnStyle} onClick={() => {
+                setOpen(false);
+                router.push('/dashboard/public_link_generator');
+              }}>
+                <Image src="/link.svg" alt="Link" width={20} height={20} style={{ marginRight: '8px' }} />
+                Public Link Generator
+              </button>
+              {(userData.role === 'admin' || userData.role === 'developer') && (
+                <button style={menuBtnStyle} onClick={handleManageAssistants}>
+                  <Image src="/settings.svg" alt="Settings" width={18} height={18} style={{ marginRight: '8px' }} />
+                  Manage Assistants
+                </button>
+              )}
+              {(userData.role === 'admin' || userData.role === 'developer' || userData.role === 'assistant') && (
+                <>
+                  <button style={menuBtnStyle} onClick={() => {
+                    setOpen(false);
+                    router.push('/dashboard/manage_online_system');
+                  }}>
+                    <Image src="/settings2.svg" alt="Settings" width={20} height={20} style={{ marginRight: '8px' }} />
+                    Manage Online System
+                  </button>
+                  {showMarketingPageMenu && (
+                    <button
+                      style={menuBtnStyle}
+                      onClick={() => {
+                        setOpen(false);
+                        router.push('/welcome');
+                      }}
+                    >
+                      <Image src="/marketing.svg" alt="Marketing" width={20} height={20} style={{ marginRight: '8px' }} />
+                      Manage Marketing Page
+                    </button>
+                  )}
+                  {isMarketingSystemEnabled && (
+                    <button
+                      style={{
+                        ...menuBtnStyle,
+                        position: 'relative',
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                      onClick={() => {
+                        setOpen(false);
+                        router.push('/dashboard/students_reviews');
+                      }}
+                    >
+                      <Image src="/testimonials2.svg" alt="Students Reviews" width={20} height={20} style={{ marginRight: '8px' }} />
+                      Students Reviews
+                      {publicTestimonialsPending > 0 ? (
+                        <span
+                          style={{
+                            marginLeft: '8px',
+                            minWidth: '20px',
+                            height: '20px',
+                            borderRadius: '999px',
+                            background: '#dc3545',
+                            color: '#fff',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '0 6px',
+                          }}
+                          aria-label={`${publicTestimonialsPending} pending reviews`}
+                        >
+                          {publicTestimonialsPending > 99 ? '99+' : publicTestimonialsPending}
+                        </span>
+                      ) : null}
+                    </button>
+                  )}
+                  {isScoringEnabled && (
+                    <button style={menuBtnStyle} onClick={() => {
+                      setOpen(false);
+                      router.push('/dashboard/manage_scoring_system');
+                    }}>
+                      <Image src="/star4.svg" alt="Scoring System" width={20} height={20} style={{ marginRight: '8px' }} />
+                      Manage Scoring System
+                    </button>
+                  )}
+                </>
+              )}
+              {isSubscriptionEnabled && userData.role === 'developer' && (
+                <button style={menuBtnStyle} onClick={handleSubscriptionDashboard}>
+                  <Image src="/dollar.svg" alt="Dollar" width={20} height={20} style={{ marginRight: '8px' }} />
+                  Subscription Dashboard
+                </button>
+              )}
+            </>
+          )}
+          {useOtherMenu ? (
+            <div
+              ref={otherRef}
+              style={{ position: 'relative' }}
+              onMouseEnter={openOther}
+              onMouseLeave={closeOtherSoon}
+            >
+              <button
+                style={menuBtnStyle}
+                onClick={() => setShowOther((v) => !v)}
+              >
+                <Image src="/other.svg" alt="Other" width={20} height={20} style={{ marginRight: '8px' }} />
+                Other
+              </button>
+              {showOther && (
+                <div style={subMenuStyle}>
+                  <button
+                    style={menuBtnStyle}
+                    onClick={() => {
+                      setShowOther(false);
+                      setOpen(false);
+                      handleContactDeveloper();
+                    }}
+                  >
+                    <Image src="/message2.svg" alt="Message" width={20} height={20} style={{ marginRight: '8px' }} />
+                    Contact Developer
+                  </button>
+                  <button
+                    style={menuBtnStyle}
+                    onClick={() => {
+                      setShowOther(false);
+                      setOpen(false);
+                      setShowAppVideos(true);
+                    }}
+                  >
+                    <Image src="/video.svg" alt="App Videos" width={20} height={20} style={{ marginRight: '8px' }} />
+                    App Videos
+                  </button>
+                  <button
+                    style={menuBtnStyle}
+                    onClick={() => {
+                      setShowOther(false);
+                      handleInstallApp();
+                    }}
+                  >
+                    <Image src="/download.svg" alt="Download" width={20} height={20} style={{ marginRight: '8px' }} />
+                    Install App
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <button style={menuBtnStyle} onClick={handleContactDeveloper}>
+                <Image src="/message2.svg" alt="Message" width={20} height={20} style={{ marginRight: '8px' }} />
+                Contact Developer
+              </button>
+              <button
+                style={menuBtnStyle}
+                onClick={() => {
+                  setOpen(false);
+                  setShowAppVideos(true);
+                }}
+              >
+                <Image src="/video.svg" alt="App Videos" width={20} height={20} style={{ marginRight: '8px' }} />
+                App Videos
+              </button>
+              <button style={menuBtnStyle} onClick={handleInstallApp}>
+                <Image src="/download.svg" alt="Download" width={20} height={20} style={{ marginRight: '8px' }} />
+                Install App
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <QRCodeModal isOpen={showQRModal} onClose={() => setShowQRModal(false)} />
       <InstallApp isOpen={showInstallApp} onClose={() => setShowInstallApp(false)} />
       <StudentLinksModal isOpen={showLinksModal} onClose={() => setShowLinksModal(false)} />
@@ -577,3 +643,36 @@ export default function UserMenu() {
     </div>
   );
 }
+
+const menuBtnStyle = {
+  width: '100%',
+  background: 'none',
+  border: 'none',
+  color: '#1FA8DC',
+  fontWeight: 700,
+  fontSize: 16,
+  padding: '10px 20px',
+  textAlign: 'left',
+  cursor: 'pointer',
+  borderRadius: 8,
+  transition: 'background 0.15s',
+  marginBottom: 2,
+  outline: 'none',
+  display: 'flex',
+  alignItems: 'center',
+};
+
+const subMenuStyle = {
+  position: 'absolute',
+  bottom: 0,
+  top: 'auto',
+  right: '100%',
+  marginRight: 10,
+  minWidth: 230,
+  background: '#fff',
+  borderRadius: 14,
+  boxShadow: '0 8px 32px rgba(31,168,220,0.18)',
+  border: '1.5px solid #e9ecef',
+  zIndex: 10001,
+  padding: '8px 0',
+}; 
