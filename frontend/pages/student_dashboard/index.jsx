@@ -1108,6 +1108,102 @@ export default function StudentDashboard() {
               padding: 20px 20px 15px 20px !important;
             }
           }
+
+          .dashboard-panel {
+            box-sizing: border-box;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-right: auto !important;
+            margin-left: auto !important;
+          }
+
+          .score-section-wide {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+
+          .welcome-section-wide {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+
+          .sessions-reminder-wide {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+
+          .dashboard-button-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            width: 100%;
+            max-width: 820px;
+            margin: 0 auto;
+            align-items: stretch;
+          }
+
+          .dashboard-button-grid > * {
+            min-width: 0;
+            width: 100%;
+          }
+
+          .dashboard-button-grid .dashboard-btn {
+            min-width: 0;
+            max-width: 100%;
+            height: 100%;
+            margin-bottom: 0;
+            padding-right: 10px;
+            padding-left: 10px;
+            line-height: 1.25;
+            text-align: center;
+            white-space: normal;
+            overflow-wrap: anywhere;
+          }
+
+          .dashboard-button-grid .dashboard-btn img {
+            flex: 0 0 auto;
+            width: clamp(16px, 2.5vw, 20px) !important;
+            height: clamp(16px, 2.5vw, 20px) !important;
+            object-fit: contain;
+          }
+
+          @media (max-width: 768px) {
+            .dashboard-button-grid {
+              gap: 12px;
+              max-width: 100%;
+            }
+
+            .dashboard-button-grid .dashboard-btn {
+              min-height: 56px;
+              padding: 14px 10px;
+              font-size: clamp(0.85rem, 2.2vw, 1rem);
+              letter-spacing: 0.4px;
+            }
+
+            .dashboard-button-grid .dashboard-btn img {
+              width: 18px !important;
+              height: 18px !important;
+            }
+          }
+
+          @media (max-width: 480px) {
+            .dashboard-button-grid {
+              grid-template-columns: minmax(0, 1fr);
+              gap: 10px;
+            }
+
+            .dashboard-button-grid .dashboard-btn {
+              min-height: 52px;
+              margin-bottom: 0;
+              padding: 14px 12px;
+              font-size: 1rem;
+            }
+
+            .dashboard-button-grid .dashboard-btn img {
+              width: 19px !important;
+              height: 19px !important;
+            }
+          }
         `}</style>
         
         <div style={{ marginTop: 30, marginBottom: 20 }}>
@@ -1140,7 +1236,7 @@ export default function StudentDashboard() {
             </div>
           ) : (
             <>
-              <div className="welcome-message" style={{
+              <div className="welcome-message dashboard-panel welcome-section-wide" style={{
                 background: "rgba(255, 255, 255, 0.1)",
                 borderRadius: "12px",
                 padding: "20px",
@@ -1178,7 +1274,7 @@ export default function StudentDashboard() {
 
               {/* Sessions Remaining Reminder - only show when payment system is enabled and <= 3 */}
               {isPaymentSystemEnabled && studentData && remainingSessions <= 3 && (
-                <div className="sessions-reminder" style={{
+                <div className="sessions-reminder dashboard-panel sessions-reminder-wide" style={{
                   background: "rgba(255, 255, 255, 0.95)",
                   borderRadius: "12px",
                   padding: "14px 18px",
@@ -1236,7 +1332,7 @@ export default function StudentDashboard() {
 
               {/* Score Section - Only show if scoring system is enabled */}
               {isScoringEnabled && (
-                <div className="score-section" style={{
+                <div className="score-section dashboard-panel score-section-wide" style={{
                   background: "linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 249, 250, 0.95) 100%)",
                   borderRadius: "16px",
                   padding: "20px",
@@ -1283,7 +1379,7 @@ export default function StudentDashboard() {
 
               {/* Next Session Reminder */}
               {nextSession && (
-                <div className="next-session-reminder" style={{
+                <div className="next-session-reminder dashboard-panel" style={{
                   background: "linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 249, 250, 0.95) 100%)",
                   borderRadius: "12px",
                   padding: "16px",
@@ -1406,14 +1502,7 @@ export default function StudentDashboard() {
                 </div>
               )}
 
-              <button 
-                className="dashboard-btn"
-                onClick={() => router.push("/student_dashboard/my_info")}
-              >
-                <Image src="/user-circle3.svg" alt="User" width={20} height={20} />
-                My Information
-              </button>
-
+              <div className="dashboard-button-grid">
               {isScoringEnabled && (
                 <button
                   className="dashboard-btn"
@@ -1545,13 +1634,6 @@ export default function StudentDashboard() {
                 <Image src="/center.svg" alt="Centers" width={20} height={20} />
                 Centers Schedule
               </button>
-              <button
-                className="dashboard-btn"
-                onClick={() => router.push("/contact_assistants")}
-              >
-                <Image src="/message.svg" alt="Phone" width={20} height={20} />
-                Contact Assistants
-              </button>
               {hasAvailableGroups && (
                 <button
                   className="dashboard-btn whatsapp-btn"
@@ -1562,6 +1644,7 @@ export default function StudentDashboard() {
                   {whatsappGroupsLoading ? 'Loading...' : 'Join WhatsApp Group'}
                 </button>
               )}
+              </div>
               </>
               )}
             </>

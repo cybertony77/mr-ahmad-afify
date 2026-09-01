@@ -34,7 +34,8 @@ export default function Header() {
       borderBottom: '2px solid #e9ecef',
       gap: 18,
       position: 'relative',
-      zIndex: 10
+      // Keep the header (and its dropdown menu) above sticky table headers.
+      zIndex: 1000
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginLeft: 32 }}>
         <span onClick={handleLogoClick} style={{ cursor: 'pointer', display: 'inline-block' }}>
@@ -45,7 +46,7 @@ export default function Header() {
             height={60}
             style={{ 
               borderRadius: '50%', 
-              background: 'white', 
+              background: '#1FA8DC', 
               boxShadow: '0 2px 8px rgba(31,168,220,0.10)',
               objectFit: 'cover',
               objectPosition: 'center',
